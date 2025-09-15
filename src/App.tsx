@@ -25,24 +25,96 @@ const App = () => (
             <Route path="/login" element={<Login />} />
             
             {/* Protected Client Routes */}
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route
-              path="/*"
+              path="/dashboard"
               element={
                 <ProtectedRoute requiredRole="client">
                   <ClientLayout />
                 </ProtectedRoute>
               }
             >
-              <Route path="dashboard" element={<Dashboard />} />
-              <Route path="sites" element={<Sites />} />
-              <Route path="backlinks" element={<div className="p-8 text-center"><h1 className="text-2xl">Backlinks em desenvolvimento...</h1></div>} />
-              <Route path="ranking" element={<div className="p-8 text-center"><h1 className="text-2xl">Ranking em desenvolvimento...</h1></div>} />
-              <Route path="club" element={<div className="p-8 text-center"><h1 className="text-2xl">Club em desenvolvimento...</h1></div>} />
-              <Route path="affiliate" element={<div className="p-8 text-center"><h1 className="text-2xl">Afiliados em desenvolvimento...</h1></div>} />
-              <Route path="support" element={<div className="p-8 text-center"><h1 className="text-2xl">Suporte em desenvolvimento...</h1></div>} />
-              <Route path="settings" element={<div className="p-8 text-center"><h1 className="text-2xl">Configurações em desenvolvimento...</h1></div>} />
+              <Route index element={<Dashboard />} />
             </Route>
+            
+            <Route
+              path="/sites"
+              element={
+                <ProtectedRoute requiredRole="client">
+                  <ClientLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route index element={<Sites />} />
+            </Route>
+            
+            <Route
+              path="/backlinks"
+              element={
+                <ProtectedRoute requiredRole="client">
+                  <ClientLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route index element={<div className="p-8 text-center"><h1 className="text-2xl">Backlinks em desenvolvimento...</h1></div>} />
+            </Route>
+            
+            <Route
+              path="/ranking"
+              element={
+                <ProtectedRoute requiredRole="client">
+                  <ClientLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route index element={<div className="p-8 text-center"><h1 className="text-2xl">Ranking em desenvolvimento...</h1></div>} />
+            </Route>
+            
+            <Route
+              path="/club"
+              element={
+                <ProtectedRoute requiredRole="client">
+                  <ClientLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route index element={<div className="p-8 text-center"><h1 className="text-2xl">Club em desenvolvimento...</h1></div>} />
+            </Route>
+            
+            <Route
+              path="/affiliate"
+              element={
+                <ProtectedRoute requiredRole="client">
+                  <ClientLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route index element={<div className="p-8 text-center"><h1 className="text-2xl">Afiliados em desenvolvimento...</h1></div>} />
+            </Route>
+            
+            <Route
+              path="/support"
+              element={
+                <ProtectedRoute requiredRole="client">
+                  <ClientLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route index element={<div className="p-8 text-center"><h1 className="text-2xl">Suporte em desenvolvimento...</h1></div>} />
+            </Route>
+            
+            <Route
+              path="/settings"
+              element={
+                <ProtectedRoute requiredRole="client">
+                  <ClientLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route index element={<div className="p-8 text-center"><h1 className="text-2xl">Configurações em desenvolvimento...</h1></div>} />
+            </Route>
+
+            {/* Root redirect */}
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
             
             {/* 404 Route */}
             <Route path="*" element={<NotFound />} />

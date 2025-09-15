@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,7 +13,11 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const { login, loading } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
+
+  // Get the intended destination from location state
+  const from = location.state?.from || '/dashboard';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,7 +29,7 @@ const Login = () => {
         title: "Login realizado com sucesso!",
         description: "Bem-vindo de volta à plataforma.",
       });
-      navigate('/dashboard');
+      navigate(from, { replace: true });
     } else {
       toast({
         title: "Erro no login",
