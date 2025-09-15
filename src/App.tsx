@@ -9,6 +9,12 @@ import ClientLayout from "@/components/layouts/ClientLayout";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Sites from "./pages/Sites";
+import Backlinks from "./pages/Backlinks";
+import Ranking from "./pages/Ranking";
+import Club from "./pages/Club";
+import Affiliate from "./pages/Affiliate";
+import Support from "./pages/Support";
+import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -55,7 +61,7 @@ const App = () => (
                 </ProtectedRoute>
               }
             >
-              <Route index element={<div className="p-8 text-center"><h1 className="text-2xl">Backlinks em desenvolvimento...</h1></div>} />
+              <Route index element={<Backlinks />} />
             </Route>
             
             <Route
@@ -66,7 +72,7 @@ const App = () => (
                 </ProtectedRoute>
               }
             >
-              <Route index element={<div className="p-8 text-center"><h1 className="text-2xl">Ranking em desenvolvimento...</h1></div>} />
+              <Route index element={<Ranking />} />
             </Route>
             
             <Route
@@ -77,7 +83,7 @@ const App = () => (
                 </ProtectedRoute>
               }
             >
-              <Route index element={<div className="p-8 text-center"><h1 className="text-2xl">Club em desenvolvimento...</h1></div>} />
+              <Route index element={<Club />} />
             </Route>
             
             <Route
@@ -88,7 +94,7 @@ const App = () => (
                 </ProtectedRoute>
               }
             >
-              <Route index element={<div className="p-8 text-center"><h1 className="text-2xl">Afiliados em desenvolvimento...</h1></div>} />
+              <Route index element={<Affiliate />} />
             </Route>
             
             <Route
@@ -99,7 +105,7 @@ const App = () => (
                 </ProtectedRoute>
               }
             >
-              <Route index element={<div className="p-8 text-center"><h1 className="text-2xl">Suporte em desenvolvimento...</h1></div>} />
+              <Route index element={<Support />} />
             </Route>
             
             <Route
@@ -110,7 +116,7 @@ const App = () => (
                 </ProtectedRoute>
               }
             >
-              <Route index element={<div className="p-8 text-center"><h1 className="text-2xl">Configurações em desenvolvimento...</h1></div>} />
+              <Route index element={<Settings />} />
             </Route>
 
             {/* Root redirect */}
