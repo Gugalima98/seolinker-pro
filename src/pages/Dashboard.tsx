@@ -1,71 +1,152 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { 
-  Globe, 
-  LinkIcon, 
-  TrendingUp, 
-  Target, 
+import {
+  Globe,
+  LinkIcon,
+  TrendingUp,
+  Target,
   Plus,
   ExternalLink,
   BarChart3,
   ArrowUpRight,
-  ArrowDownRight
+  ArrowDownRight,
+  RefreshCw
 } from 'lucide-react';
-import { mockClientSites } from '@/data/clientSites';
-import { mockBacklinks } from '@/data/backlinks';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '@/lib/supabase';
+import { useToast } from '@/components/ui/use-toast';
+
+// Interfaces
+interface ClientSite {
+  id: number;
+  url: string;
+  niche_primary: string;
+  da?: number;
+  backlinks?: number;
+  organic_keywords?: number;
+  ref_domains?: number;
+}
+
+interface Backlink {
+  id: number;
+  anchor_text: string;
+  status: string;
+  network_sites: { domain: string };
+  client_sites: { url: string };
+}
 
 const Dashboard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [counts, setCounts] = useState({ sites: 0, backlinks: 0, published: 0 });
+  const { toast } = useToast();
 
-  // Simulate counting animation
+  const [sites, setSites] = useState<ClientSite[]>([]);
+  const [backlinks, setBacklinks] = useState<Backlink[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchSites = useCallback(async () => {
+    if (!user) return;
+    const { data, error } = await supabase
+      .from('client_sites')
+      .select('id, url, niche_primary, da, backlinks, organic_keywords, ref_domains')
+      .eq('user_id', user.id);
+
+    if (error) {
+      toast({ title: "Erro ao buscar sites", description: error.message, variant: "destructive" });
+    } else {
+      setSites(data as ClientSite[]);
+    }
+  }, [user, toast]);
+
+  const fetchBacklinks = useCallback(async () => {
+    if (!user) return;
+    const { data, error } = await supabase
+      .from('backlinks')
+      .select(`id, anchor_text, status, network_sites(domain), client_sites(url)`)
+      .eq('user_id', user.id);
+
+    if (error) {
+      toast({ title: "Erro ao buscar backlinks", description: error.message, variant: "destructive" });
+    } else {
+      setBacklinks(data as Backlink[]);
+    }
+  }, [user, toast]);
+
   useEffect(() => {
-    const userSites = mockClientSites.filter(site => site.userId === user?.id);
-    const userBacklinks = mockBacklinks.filter(bl => 
-      userSites.some(site => site.url === bl.clientSiteUrl)
-    );
-    const publishedBacklinks = userBacklinks.filter(bl => bl.status === 'Publicado');
-
-    const animateCount = (target: number, setter: (value: number) => void) => {
-      let current = 0;
-      const increment = target / 30;
-      const timer = setInterval(() => {
-        current += increment;
-        if (current >= target) {
-          setter(target);
-          clearInterval(timer);
-        } else {
-          setter(Math.floor(current));
-        }
-      }, 50);
+    const loadData = async () => {
+      setLoading(true);
+      if (user) {
+        await fetchSites();
+        await fetchBacklinks();
+      }
+      setLoading(false);
     };
 
-    setTimeout(() => animateCount(userSites.length, (val) => setCounts(prev => ({ ...prev, sites: val }))), 200);
-    setTimeout(() => animateCount(userBacklinks.length, (val) => setCounts(prev => ({ ...prev, backlinks: val }))), 400);
-    setTimeout(() => animateCount(publishedBacklinks.length, (val) => setCounts(prev => ({ ...prev, published: val }))), 600);
-  }, [user?.id]);
+    loadData();
+  }, [user, fetchSites, fetchBacklinks]);
 
-  const userSites = mockClientSites.filter(site => site.userId === user?.id);
-  const userBacklinks = mockBacklinks.filter(bl => 
-    userSites.some(site => site.url === bl.clientSiteUrl)
-  );
+  const counts = {
+    sites: sites.length,
+    backlinks: backlinks.length,
+    published: backlinks.filter(bl => bl.status === 'live').length
+  };
 
-  const recentBacklinks = userBacklinks.slice(0, 5);
-  const publishedCount = userBacklinks.filter(bl => bl.status === 'Publicado').length;
-  const pendingCount = userBacklinks.filter(bl => bl.status !== 'Publicado').length;
+  const recentBacklinks = backlinks.filter(bl => bl.status === 'live' || bl.status === 'processing' || bl.status === 'pending').slice(0, 5);
+  const publishedCount = backlinks.filter(bl => bl.status === 'live').length;
+
+  // Logic for Recommendations Card
+  let recommendation = null; // Initialize as null
+
+  if (sites.length === 0) {
+    recommendation = {
+      title: "Comece a Crescer!",
+      description: "Adicione seu primeiro site para começar a construir backlinks.",
+      buttonText: "Adicionar Site",
+      buttonLink: "/sites",
+      icon: <Globe className="h-5 w-5 text-primary" />
+    };
+  } else if (backlinks.length === 0) {
+    recommendation = {
+      title: "Crie seu Primeiro Backlink!",
+      description: "Seu site está pronto. Agora, gere seu primeiro backlink para impulsionar seu SEO.",
+      buttonText: "Criar Backlink",
+      buttonLink: "/backlinks",
+      icon: <LinkIcon className="h-5 w-5 text-primary" />
+    };
+  } else if (backlinks.filter(bl => bl.status === 'processing' || bl.status === 'pending').length > 0) {
+    const processingCount = backlinks.filter(bl => bl.status === 'processing' || bl.status === 'pending').length;
+    recommendation = {
+      title: "Backlinks em Andamento!",
+      description: `Você tem ${processingCount} backlink(s) sendo processado(s). Acompanhe o status.`, // Fixed pluralization
+      buttonText: "Ver Backlinks",
+      buttonLink: "/backlinks",
+      icon: <RefreshCw className="h-5 w-5 text-primary" />
+    };
+  } else {
+    // If all good, set recommendation to null so the card doesn't render
+    recommendation = null;
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-muted-foreground">Carregando dashboard...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 animate-fade-in">
       {/* Welcome Section */}
       <div className="bg-gradient-to-r from-primary to-primary-hover rounded-2xl p-8 text-white relative overflow-hidden">
         <div className="absolute inset-0 opacity-30">
-          <div className="w-full h-full bg-white/10 bg-[length:60px_60px] bg-repeat" 
+          <div className="w-full h-full bg-white/10 bg-[length:60px_60px] bg-repeat"
                style={{backgroundImage: "radial-gradient(circle at 30px 30px, white 2px, transparent 2px)"}}></div>
         </div>
         <div className="relative z-10">
@@ -124,10 +205,10 @@ const Dashboard = () => {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {userBacklinks.length > 0 ? Math.round((publishedCount / userBacklinks.length) * 100) : 0}%
+              {backlinks.length > 0 ? Math.round((publishedCount / backlinks.length) * 100) : 0}%
             </div>
-            <Progress 
-              value={userBacklinks.length > 0 ? (publishedCount / userBacklinks.length) * 100 : 0} 
+            <Progress
+              value={backlinks.length > 0 ? (publishedCount / backlinks.length) * 100 : 0}
               className="mt-2"
             />
           </CardContent>
@@ -148,8 +229,8 @@ const Dashboard = () => {
                   Sites cadastrados e suas métricas principais
                 </CardDescription>
               </div>
-              <Button 
-                size="sm" 
+              <Button
+                size="sm"
                 onClick={() => navigate('/sites')}
                 className="bg-gradient-to-r from-primary to-primary-hover"
               >
@@ -159,12 +240,12 @@ const Dashboard = () => {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            {userSites.length === 0 ? (
+            {sites.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 <Globe className="h-12 w-12 mx-auto mb-4 opacity-50" />
                 <p>Nenhum site cadastrado ainda.</p>
-                <Button 
-                  className="mt-4" 
+                <Button
+                  className="mt-4"
                   onClick={() => navigate('/sites')}
                   variant="outline"
                 >
@@ -172,28 +253,30 @@ const Dashboard = () => {
                 </Button>
               </div>
             ) : (
-              userSites.slice(0, 3).map((site) => (
-                <div key={site.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors">
+              sites.slice(0, 3).map((site) => (
+                <div key={site.id} className="flex items-center justify-between p-4 border rounded-lg">
                   <div className="space-y-1">
                     <div className="flex items-center space-x-2">
                       <h4 className="font-medium">{site.url}</h4>
-                      <Badge variant="secondary">{site.niche}</Badge>
+                      <Badge variant="secondary">{site.niche_primary}</Badge>
                     </div>
                     <div className="flex items-center space-x-4 text-sm text-muted-foreground">
-                      <span>DA: {site.metrics.da}</span>
-                      <span>Backlinks: {site.metrics.backlinks}</span>
-                      <span>Keywords: {site.metrics.organicKeywords}</span>
+                      <span>DA: {site.da || 'N/A'}</span>
+                      <span>Backlinks: {site.backlinks || 'N/A'}</span>
+                      <span>Keywords: {site.organic_keywords || 'N/A'}</span>
                     </div>
                   </div>
-                  <Button variant="ghost" size="sm">
-                    <ExternalLink className="h-4 w-4" />
+                  <Button variant="ghost" size="sm" asChild>
+                    <a href={site.url.startsWith('http://') || site.url.startsWith('https://') ? site.url : `https://${site.url}`} target="_blank" rel="noopener noreferrer">
+                      <ExternalLink className="h-4 w-4" />
+                    </a>
                   </Button>
                 </div>
               ))
             )}
-            {userSites.length > 3 && (
+            {sites.length > 3 && (
               <Button variant="ghost" className="w-full" onClick={() => navigate('/sites')}>
-                Ver todos os sites ({userSites.length})
+                Ver todos os sites ({sites.length})
               </Button>
             )}
           </CardContent>
@@ -212,8 +295,8 @@ const Dashboard = () => {
                   Últimos backlinks criados e seus status
                 </CardDescription>
               </div>
-              <Button 
-                size="sm" 
+              <Button
+                size="sm"
                 onClick={() => navigate('/backlinks')}
                 variant="outline"
               >
@@ -226,8 +309,8 @@ const Dashboard = () => {
               <div className="text-center py-8 text-muted-foreground">
                 <LinkIcon className="h-12 w-12 mx-auto mb-4 opacity-50" />
                 <p>Nenhum backlink criado ainda.</p>
-                <Button 
-                  className="mt-4" 
+                <Button
+                  className="mt-4"
                   onClick={() => navigate('/backlinks')}
                   variant="outline"
                 >
@@ -239,25 +322,25 @@ const Dashboard = () => {
                 <div key={backlink.id} className="flex items-center justify-between p-4 border rounded-lg">
                   <div className="space-y-1 flex-1">
                     <div className="flex items-center space-x-2">
-                      <span className="font-medium text-sm">{backlink.anchorText}</span>
-                      <Badge 
+                      <span className="font-medium text-sm">{backlink.anchor_text}</span>
+                      <Badge
                         variant={
-                          backlink.status === 'Publicado' ? 'default' :
-                          backlink.status === 'Criando Conteúdo' ? 'secondary' : 'outline'
+                          backlink.status === 'live' ? 'default' :
+                          ['processing', 'pending'].includes(backlink.status) ? 'secondary' : 'outline'
                         }
                         className={
-                          backlink.status === 'Publicado' ? 'status-published' :
-                          backlink.status === 'Criando Conteúdo' ? 'status-creating' : 'status-pending'
+                          backlink.status === 'live' ? 'status-published' :
+                          ['processing', 'pending'].includes(backlink.status) ? 'status-creating' : 'status-pending'
                         }
                       >
                         {backlink.status}
                       </Badge>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      {backlink.networkSiteUrl} → {backlink.clientSiteUrl}
+                      {backlink.network_sites?.domain} → {backlink.client_sites?.url}
                     </p>
                   </div>
-                  {backlink.status === 'Publicado' ? (
+                  {backlink.status === 'live' ? (
                     <ArrowUpRight className="h-4 w-4 text-success" />
                   ) : (
                     <ArrowDownRight className="h-4 w-4 text-muted-foreground" />
@@ -269,42 +352,26 @@ const Dashboard = () => {
         </Card>
       </div>
 
-      {/* Quick Actions */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Ações Rápidas</CardTitle>
-          <CardDescription>
-            Acesse rapidamente as principais funcionalidades da plataforma
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Button 
-              className="h-20 flex-col space-y-2 bg-gradient-to-r from-primary to-primary-hover hover:shadow-glow"
-              onClick={() => navigate('/sites')}
+      {/* Recommendations Card */}
+      {recommendation && (
+        <Card className="animate-slide-up" style={{ animationDelay: '0.2s' }}>
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              {recommendation.icon}
+              <span>{recommendation.title}</span>
+            </CardTitle>
+            <CardDescription>{recommendation.description}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button
+              className="w-full bg-gradient-to-r from-primary to-primary-hover hover:shadow-glow"
+              onClick={() => navigate(recommendation.buttonLink)}
             >
-              <Globe className="h-6 w-6" />
-              <span>Gerenciar Sites</span>
+              {recommendation.buttonText}
             </Button>
-            <Button 
-              variant="outline" 
-              className="h-20 flex-col space-y-2 hover:bg-muted"
-              onClick={() => navigate('/backlinks')}
-            >
-              <LinkIcon className="h-6 w-6" />
-              <span>Criar Backlink</span>
-            </Button>
-            <Button 
-              variant="outline" 
-              className="h-20 flex-col space-y-2 hover:bg-muted"
-              onClick={() => navigate('/ranking')}
-            >
-              <BarChart3 className="h-6 w-6" />
-              <span>Ver Ranking</span>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 };

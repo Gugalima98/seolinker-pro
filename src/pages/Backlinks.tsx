@@ -1,448 +1,511 @@
-import React, { useState } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import React, { useEffect, useState, useCallback } from 'react';
+import { supabase } from '@/lib/supabase';
+import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
 import { Progress } from '@/components/ui/progress';
-import { 
-  LinkIcon, 
-  Plus, 
-  Search,
-  Filter,
-  ExternalLink,
-  Calendar,
-  TrendingUp,
-  Clock,
-  CheckCircle,
-  AlertCircle,
-  Target,
-  DollarSign,
-  BarChart3,
-  Globe,
-  Zap
-} from 'lucide-react';
-import { mockBacklinks, Backlink } from '@/data/backlinks';
-import { mockClientSites } from '@/data/clientSites';
-import { mockNetworkSites } from '@/data/networkSites';
-import { useToast } from '@/hooks/use-toast';
-import { formatDistanceToNow } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { PlusCircle, Loader2, ArrowLeft, Eye, Trash2, Calendar as CalendarIcon, Link, CheckCircle, RefreshCw } from 'lucide-react';
+import { CreateBacklinkForm, CreateBacklinkFormValues } from '@/components/forms/CreateBacklinkForm';
+import { SelectNetworkSiteView } from '@/components/views/SelectNetworkSiteView';
+import { format, startOfDay, endOfDay } from 'date-fns';
+import { DateRange } from "react-day-picker"
+import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
+import { logEvent } from '@/lib/logger';
 
-const Backlinks = () => {
-  const { user } = useAuth();
+// Interfaces
+interface Backlink {
+  id: number;
+  target_url: string;
+  anchor_text: string;
+  status: string;
+  created_at: string;
+  post_url?: string;
+  article_title?: string;
+  progress_percent?: number;
+  client_sites: { url: string };
+}
+interface NetworkSite {
+  id: number;
+  domain: string;
+}
+
+const BacklinksPage = () => {
+  const [backlinks, setBacklinks] = useState<Backlink[]>([]);
+  const [stats, setStats] = useState({ total: 0, live: 0, processing: 0 });
+  const [loading, setLoading] = useState(true);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isAlertOpen, setIsAlertOpen] = useState(false);
+  
+  // Filter states
+  const [statusFilter, setStatusFilter] = useState<string>('');
+  const [dateRange, setDateRange] = useState<DateRange | undefined>();
+
+  // State for multi-step modal
+  const [step, setStep] = useState(1);
+  const [step1Data, setStep1Data] = useState<CreateBacklinkFormValues | null>(null);
+  const [selectedNetworkSite, setSelectedNetworkSite] = useState<NetworkSite | null>(null);
+  const [backlinkToDelete, setBacklinkToDelete] = useState<Backlink | null>(null);
+
+  const [alertActionType, setAlertActionType] = useState<'create' | 'delete' | null>(null);
+
   const { toast } = useToast();
-  const [backlinks, setBacklinks] = useState(mockBacklinks);
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [isNetworkModalOpen, setIsNetworkModalOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [newBacklink, setNewBacklink] = useState({
-    clientSiteUrl: '',
-    targetUrl: '',
-    anchorText: '',
-    selectedNetworkSite: ''
-  });
+  const { user } = useAuth();
 
-  const userSites = mockClientSites.filter(site => site.userId === user?.id);
-  const userBacklinks = backlinks.filter(bl => 
-    userSites.some(site => site.url === bl.clientSiteUrl)
-  );
+  const fetchStats = useCallback(async () => {
+    if (!user) return; // Ensure user is loaded
 
-  const filteredBacklinks = userBacklinks.filter(backlink => {
-    const matchesSearch = 
-      backlink.anchorText.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      backlink.clientSiteUrl.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      backlink.networkSiteUrl.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesStatus = statusFilter === 'all' || backlink.status === statusFilter;
-    
-    return matchesSearch && matchesStatus;
-  });
+    const { count: total } = await supabase
+      .from('backlinks')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id);
 
-  const stats = {
-    total: userBacklinks.length,
-    published: userBacklinks.filter(bl => bl.status === 'Publicado').length,
-    creating: userBacklinks.filter(bl => bl.status === 'Criando Conteúdo').length,
-    pending: userBacklinks.filter(bl => bl.status === 'Aguardando Aprovação').length
+    const { count: live } = await supabase
+      .from('backlinks')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .eq('status', 'live');
+
+    const { count: processing } = await supabase
+      .from('backlinks')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .in('status', ['processing', 'pending']);
+
+    setStats({
+      total: total || 0,
+      live: live || 0,
+      processing: processing || 0,
+    });
+  }, [user]);
+
+  const fetchBacklinks = useCallback(async () => {
+    if (!user) return; // Ensure user is loaded
+
+    setLoading(true);
+    let query = supabase
+      .from('backlinks')
+      .select(`id, target_url, anchor_text, status, created_at, post_url, article_title, progress_percent, client_sites(url)`)
+      .eq('user_id', user.id); // Filter by current user's ID
+
+    if (statusFilter) {
+      query = query.eq('status', statusFilter);
+    }
+
+    if (dateRange?.from) {
+      query = query.gte('created_at', startOfDay(dateRange.from).toISOString());
+    }
+    if (dateRange?.to) {
+      query = query.lte('created_at', endOfDay(dateRange.to).toISOString());
+    }
+
+    const { data, error } = await query.order('created_at', { ascending: false });
+
+    if (error) {
+      toast({ title: "Erro ao buscar backlinks", description: error.message, variant: "destructive" });
+    } else {
+      setBacklinks(data as any);
+    }
+    setLoading(false);
+  }, [statusFilter, dateRange, toast, user]);
+
+  useEffect(() => {
+    if (user) {
+      fetchBacklinks();
+    }
+  }, [fetchBacklinks, user]);
+
+  useEffect(() => {
+    if (user) {
+      fetchStats();
+    }
+
+    const channel = supabase.channel('public:backlinks')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'backlinks' },
+        (payload) => {
+          const updatedBacklink = payload.new as Backlink;
+          setBacklinks(currentBacklinks =>
+            currentBacklinks.map(b => 
+              b.id === updatedBacklink.id ? { ...b, ...updatedBacklink } : b
+            )
+          );
+          if (payload.old.status !== payload.new.status) {
+            fetchStats();
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchStats, user]);
+
+  const resetFlow = () => {
+    setStep(1);
+    setStep1Data(null);
+    setSelectedNetworkSite(null);
+    setIsDialogOpen(false);
+    setIsSubmitting(false);
+    setAlertActionType(null);
+  }
+
+  const handleStep1Submit = (values: CreateBacklinkFormValues) => {
+    setStep1Data(values);
+    setStep(2);
   };
 
-  const handleCreateBacklink = () => {
-    if (!newBacklink.clientSiteUrl || !newBacklink.targetUrl || !newBacklink.anchorText) {
-      toast({
-        title: "Erro",
-        description: "Preencha todos os campos obrigatórios.",
-        variant: "destructive",
-      });
+  const handleSiteSelection = (networkSite: NetworkSite) => {
+    setSelectedNetworkSite(networkSite);
+    setAlertActionType('create');
+    setIsAlertOpen(true);
+  }
+
+  const handleFinalCreation = async () => {
+    if (!step1Data || !selectedNetworkSite) return;
+
+    setIsSubmitting(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+        toast({ title: "Erro de autenticação", variant: "destructive" });
+        setIsSubmitting(false);
+        return;
+    }
+
+    const { data: newBacklink, error: insertError } = await supabase.from('backlinks').insert([{
+      user_id: user.id,
+      client_site_id: step1Data.client_site_id,
+      network_site_id: selectedNetworkSite.id,
+      target_url: step1Data.target_url,
+      anchor_text: step1Data.anchor_text,
+      status: 'pending',
+    }]).select().single();
+
+    if (insertError || !newBacklink) {
+      logEvent('error', `Failed to create backlink record for ${step1Data.target_url}.`, { userId: user.id, error: insertError.message });
+      toast({ title: "Erro ao criar registro do backlink", description: insertError.message, variant: "destructive" });
+      setIsSubmitting(false);
       return;
     }
-    setIsCreateModalOpen(false);
-    setIsNetworkModalOpen(true);
-  };
 
-  const handleSelectNetworkSite = (networkSiteUrl: string) => {
-    const newBacklinkData: Backlink = {
-      id: Math.max(...backlinks.map(bl => bl.id)) + 1,
-      clientSiteUrl: newBacklink.clientSiteUrl,
-      targetUrl: newBacklink.targetUrl,
-      anchorText: newBacklink.anchorText,
-      networkSiteUrl: networkSiteUrl,
-      status: 'Criando Conteúdo',
-      creationDate: new Date().toISOString().split('T')[0],
-      metrics: mockNetworkSites.find(site => site.url === networkSiteUrl)?.metrics
-    };
-
-    setBacklinks([newBacklinkData, ...backlinks]);
-    setNewBacklink({ clientSiteUrl: '', targetUrl: '', anchorText: '', selectedNetworkSite: '' });
-    setIsNetworkModalOpen(false);
-
-    toast({
-      title: "Backlink criado com sucesso!",
-      description: `Seu backlink está sendo processado em ${networkSiteUrl}`,
+    // Insert notification for backlink creation
+    await supabase.from('notifications').insert({
+      user_id: user.id,
+      message: `Seu backlink para ${newBacklink.target_url} está sendo processado.`, 
+      type: 'info',
     });
+
+    toast({ title: "Solicitação recebida!", description: "Iniciando o processamento do seu backlink..." });
+    resetFlow();
+    fetchBacklinks();
+    fetchStats();
+
+    try {
+      const { error: functionError } = await supabase.functions.invoke('process-backlink', {
+        body: { backlink_id: newBacklink.id },
+      });
+
+      if (functionError) throw functionError;
+
+      logEvent('success', `Backlink creation process started for ${step1Data.target_url}.`, { userId: user.id, backlinkId: newBacklink.id });
+      console.log("Edge function 'process-backlink' invocada com sucesso.");
+      toast({ title: "Processamento em andamento!", description: "Seu artigo está sendo gerado e publicado." });
+
+    } catch (e: any) {
+      logEvent('error', `Failed to invoke process-backlink function for backlink ID ${newBacklink.id}.`, { userId: user.id, backlinkId: newBacklink.id, error: e.message });
+      console.error("Erro ao invocar a Edge Function:", e);
+      await supabase.from('backlinks').update({ status: 'error' }).eq('id', newBacklink.id);
+      toast({ title: "Erro Crítico", description: "Não foi possível iniciar o processamento do backlink.", variant: "destructive" });
+      fetchBacklinks();
+    }
+  }
+
+  const handleDeleteClick = (backlink: Backlink) => {
+    setBacklinkToDelete(backlink);
+    setAlertActionType('delete');
+    setIsAlertOpen(true);
   };
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'Publicado':
-        return <CheckCircle className="w-4 h-4 text-success" />;
-      case 'Criando Conteúdo':
-        return <Clock className="w-4 h-4 text-warning" />;
-      case 'Aguardando Aprovação':
-        return <AlertCircle className="w-4 h-4 text-muted-foreground" />;
-      default:
-        return <Clock className="w-4 h-4" />;
+  const confirmDelete = async () => {
+    if (!backlinkToDelete) return;
+
+    try {
+      const { error } = await supabase.functions.invoke('delete-backlink', {
+        body: { backlink_id: backlinkToDelete.id },
+      });
+
+      if (error) throw error;
+
+      logEvent('success', `Backlink with ID ${backlinkToDelete.id} deleted successfully by user ${user?.email}.`, { userId: user?.id, backlinkId: backlinkToDelete.id });
+      toast({ title: "Backlink deletado com sucesso!" });
+      fetchBacklinks();
+      fetchStats();
+
+    } catch (error: any) {
+      logEvent('error', `Failed to delete backlink with ID ${backlinkToDelete?.id}.`, { userId: user?.id, backlinkId: backlinkToDelete?.id, error: error.message });
+      toast({ title: "Erro ao deletar backlink", description: error.message, variant: "destructive" });
+    } finally {
+      setIsAlertOpen(false);
+      setBacklinkToDelete(null);
+      setAlertActionType(null);
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'Publicado': return 'status-published';
-      case 'Criando Conteúdo': return 'status-creating';
-      case 'Aguardando Aprovação': return 'status-pending';
-      default: return 'status-pending';
+  const handleAlertAction = () => {
+    if (alertActionType === 'create') {
+      handleFinalCreation();
+    } else if (alertActionType === 'delete') {
+      confirmDelete();
     }
   };
 
   return (
-    <div className="space-y-8 animate-fade-in">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
-        <div>
-          <h1 className="text-3xl font-bold gradient-text">Gerenciamento de Backlinks</h1>
-          <p className="text-muted-foreground">
-            Crie e monitore seus backlinks de alta qualidade
-          </p>
-        </div>
-        
-        <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-gradient-to-r from-primary to-primary-hover hover:shadow-glow">
-              <Plus className="h-4 w-4 mr-2" />
-              Criar Backlink
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>Criar Novo Backlink</DialogTitle>
-              <DialogDescription>
-                Preencha as informações do backlink que deseja criar
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="site">Site de Destino</Label>
-                <Select 
-                  value={newBacklink.clientSiteUrl} 
-                  onValueChange={(value) => setNewBacklink({...newBacklink, clientSiteUrl: value})}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione um site" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {userSites.map((site) => (
-                      <SelectItem key={site.id} value={site.url}>
-                        {site.url} - {site.niche}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="targetUrl">URL de Destino</Label>
-                <Input
-                  id="targetUrl"
-                  placeholder="/minha-pagina-importante"
-                  value={newBacklink.targetUrl}
-                  onChange={(e) => setNewBacklink({...newBacklink, targetUrl: e.target.value})}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="anchorText">Texto Âncora</Label>
-                <Input
-                  id="anchorText"
-                  placeholder="palavra-chave relevante"
-                  value={newBacklink.anchorText}
-                  onChange={(e) => setNewBacklink({...newBacklink, anchorText: e.target.value})}
-                />
-              </div>
+    <>
+      <Dialog open={isDialogOpen} onOpenChange={(open) => { if (!open) resetFlow(); else setIsDialogOpen(true); }}>
+        <div className="p-4 space-y-8 animate-fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
+            <div>
+              <h1 className="text-3xl font-bold gradient-text">Meus Backlinks</h1>
+              <p className="text-muted-foreground">Visualize e gerencie todos os seus backlinks criados.</p>
             </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsCreateModalOpen(false)}>
-                Cancelar
+            <DialogTrigger asChild>
+              <Button className="bg-gradient-to-r from-primary to-primary-hover hover:shadow-glow">
+                <PlusCircle className="mr-2 h-4 w-4" /> Criar Novo Backlink
               </Button>
-              <Button onClick={handleCreateBacklink}>
-                Próximo: Escolher Site
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </div>
+            </DialogTrigger>
+          </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card className="card-hover">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total de Backlinks</CardTitle>
-            <LinkIcon className="h-4 w-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.total}</div>
-            <p className="text-xs text-muted-foreground">
-              Backlinks criados
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="card-hover">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Publicados</CardTitle>
-            <CheckCircle className="h-4 w-4 text-success" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-success">{stats.published}</div>
-            <Progress 
-              value={stats.total > 0 ? (stats.published / stats.total) * 100 : 0} 
-              className="mt-2"
-            />
-          </CardContent>
-        </Card>
-
-        <Card className="card-hover">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Em Andamento</CardTitle>
-            <Clock className="h-4 w-4 text-warning" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-warning">{stats.creating}</div>
-            <p className="text-xs text-muted-foreground">
-              Sendo criados
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="card-hover">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Taxa de Sucesso</CardTitle>
-            <Target className="h-4 w-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {stats.total > 0 ? Math.round((stats.published / stats.total) * 100) : 0}%
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Backlinks ativos
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Pesquisar backlinks..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-full sm:w-48">
-            <Filter className="mr-2 h-4 w-4" />
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos os Status</SelectItem>
-            <SelectItem value="Publicado">Publicado</SelectItem>
-            <SelectItem value="Criando Conteúdo">Em Criação</SelectItem>
-            <SelectItem value="Aguardando Aprovação">Aguardando</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Backlinks List */}
-      {filteredBacklinks.length === 0 ? (
-        <Card>
-          <CardContent className="p-12 text-center">
-            <LinkIcon className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-50" />
-            <h3 className="text-xl font-semibold mb-2">
-              {userBacklinks.length === 0 ? "Nenhum backlink criado" : "Nenhum backlink encontrado"}
-            </h3>
-            <p className="text-muted-foreground mb-6">
-              {userBacklinks.length === 0 
-                ? "Comece criando seu primeiro backlink para aumentar a autoridade do seu site" 
-                : "Tente ajustar sua pesquisa ou filtros"
-              }
-            </p>
-            <Button 
-              className="bg-gradient-to-r from-primary to-primary-hover"
-              onClick={() => setIsCreateModalOpen(true)}
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Criar Primeiro Backlink
-            </Button>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-4">
-          {filteredBacklinks.map((backlink, index) => (
-            <Card key={backlink.id} className="card-hover animate-slide-up" style={{ animationDelay: `${index * 0.05}s` }}>
-              <CardContent className="p-6">
-                <div className="flex items-start justify-between">
-                  <div className="space-y-3 flex-1">
-                    <div className="flex items-center space-x-3">
-                      {getStatusIcon(backlink.status)}
-                      <h3 className="font-semibold text-lg">{backlink.anchorText}</h3>
-                      <Badge className={getStatusColor(backlink.status)}>
-                        {backlink.status}
-                      </Badge>
-                    </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                      <div>
-                        <p className="text-muted-foreground">Site de Origem</p>
-                        <p className="font-medium">{backlink.networkSiteUrl}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground">Site de Destino</p>
-                        <p className="font-medium">{backlink.clientSiteUrl}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground">URL de Destino</p>
-                        <p className="font-medium">{backlink.targetUrl}</p>
-                      </div>
-                    </div>
-
-                    {backlink.metrics && (
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-3 border-t">
-                        <div className="text-center">
-                          <p className="text-2xl font-bold text-primary">{backlink.metrics.da}</p>
-                          <p className="text-xs text-muted-foreground">Domain Authority</p>
-                        </div>
-                        {backlink.metrics.traffic && (
-                          <div className="text-center">
-                            <p className="text-2xl font-bold">{backlink.metrics.traffic.toLocaleString()}</p>
-                            <p className="text-xs text-muted-foreground">Tráfego Mensal</p>
-                          </div>
-                        )}
-                        <div className="text-center">
-                          <p className="text-sm font-medium">
-                            {formatDistanceToNow(new Date(backlink.creationDate), {
-                              addSuffix: true,
-                              locale: ptBR
-                            })}
-                          </p>
-                          <p className="text-xs text-muted-foreground">Criado</p>
-                        </div>
-                        {backlink.publishDate && (
-                          <div className="text-center">
-                            <p className="text-sm font-medium">
-                              {formatDistanceToNow(new Date(backlink.publishDate), {
-                                addSuffix: true,
-                                locale: ptBR
-                              })}
-                            </p>
-                            <p className="text-xs text-muted-foreground">Publicado</p>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  
-                  <Button variant="ghost" size="sm">
-                    <ExternalLink className="h-4 w-4" />
-                  </Button>
-                </div>
+          <div className="grid gap-4 md:grid-cols-3">
+            <Card className="card-hover">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Total de Backlinks</CardTitle>
+                <Link className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{stats.total}</div>
               </CardContent>
             </Card>
-          ))}
-        </div>
-      )}
+            <Card className="card-hover">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Backlinks Ativos</CardTitle>
+                <CheckCircle className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{stats.live}</div>
+              </CardContent>
+            </Card>
+            <Card className="card-hover">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Em Andamento</CardTitle>
+                <RefreshCw className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{stats.processing}</div>
+              </CardContent>
+            </Card>
+          </div>
 
-      {/* Network Sites Selection Modal */}
-      <Dialog open={isNetworkModalOpen} onOpenChange={setIsNetworkModalOpen}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <Card>
+            <CardHeader>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+                <CardTitle>Histórico de Backlinks</CardTitle>
+                <div className="flex items-center space-x-2 mt-4 sm:mt-0">
+                  <Select 
+                    value={statusFilter} 
+                    onValueChange={(value) => {
+                      setStatusFilter(value === 'all' ? '' : value);
+                    }}
+                  >
+                    <SelectTrigger className="w-full sm:w-[180px]">
+                      <SelectValue placeholder="Filtrar por status..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos os Status</SelectItem>
+                      <SelectItem value="live">Live</SelectItem>
+                      <SelectItem value="processing">Processing</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="error">Error</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        id="date"
+                        variant={"outline"}
+                        className={cn(
+                          "w-full sm:w-[300px] justify-start text-left font-normal",
+                          !dateRange && "text-muted-foreground"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {dateRange?.from ? (
+                          dateRange.to ? (
+                            <>
+                              {format(dateRange.from, "LLL dd, y")} -{" "}
+                              {format(dateRange.to, "LLL dd, y")}
+                            </>
+                          ) : (
+                            format(dateRange.from, "LLL dd, y")
+                          )
+                        ) : (
+                          <span>Selecione um período</span>
+                        )}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="end">
+                      <Calendar
+                        initialFocus
+                        mode="range"
+                        defaultMonth={dateRange?.from}
+                        selected={dateRange}
+                        onSelect={setDateRange}
+                        numberOfMonths={2}
+                      />
+                    </PopoverContent>
+                  </Popover>
+
+                  <Button variant="ghost" onClick={() => { setStatusFilter(''); setDateRange(undefined); }}>
+                    Limpar
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Título do Artigo</TableHead>
+                      <TableHead>Link de Destino</TableHead>
+                      <TableHead>Texto Âncora</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Data</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {loading ? (
+                      <TableRow><TableCell colSpan={6} className="text-center"><Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" /></TableCell></TableRow>
+                    ) : backlinks.length === 0 ? (
+                       <TableRow>
+                        <TableCell colSpan={6} className="text-center text-muted-foreground">
+                          Nenhum backlink encontrado.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      backlinks.map((backlink) => (
+                        <TableRow key={backlink.id}>
+                          <TableCell className="font-medium max-w-xs truncate">{backlink.article_title || 'N/A'}</TableCell>
+                          <TableCell className="max-w-xs truncate">{backlink.target_url}</TableCell>
+                          <TableCell className="max-w-xs truncate">{backlink.anchor_text}</TableCell>
+                          <TableCell>
+                            <div>
+                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${backlink.status === 'live' ? 'bg-green-100 text-green-800' : backlink.status === 'error' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                                {backlink.status}
+                              </span>
+                              {['processing', 'pending'].includes(backlink.status) && (
+                                <Progress value={backlink.progress_percent || 0} className="mt-2 h-2" />
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>{new Date(backlink.created_at).toLocaleDateString()}</TableCell>
+                          <TableCell className="text-right">
+                            {backlink.post_url && (
+                              <Button variant="ghost" size="icon" className="mr-2" asChild>
+                                <a href={backlink.post_url} target="_blank" rel="noopener noreferrer">
+                                  <Eye className="h-4 w-4" />
+                                </a>
+                              </Button>
+                            )}
+                            <Button variant="ghost" size="icon" onClick={() => handleDeleteClick(backlink)}>
+                              <Trash2 className="h-4 w-4 text-red-500" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Escolher Site da Rede</DialogTitle>
+            {step === 2 && <Button variant="ghost" size="sm" className="absolute left-4 top-4" onClick={() => setStep(1)}><ArrowLeft className="mr-2 h-4 w-4" /> Voltar</Button>}
+            <DialogTitle>Criar Novo Backlink (Etapa {step} de 2)</DialogTitle>
             <DialogDescription>
-              Selecione o melhor site da nossa rede para publicar seu backlink
+              {step === 1 ? 'Selecione o site, a URL de destino e o texto âncora.' : 'Selecione o melhor site da nossa rede para o seu backlink.'}
             </DialogDescription>
           </DialogHeader>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {mockNetworkSites.filter(site => site.available).map((site) => (
-              <Card key={site.id} className="cursor-pointer hover:shadow-md transition-all">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg">{site.url}</CardTitle>
-                    <Badge variant="secondary">{site.niche}</Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-3 gap-2 text-center">
-                    <div>
-                      <p className="text-2xl font-bold text-primary">{site.metrics.da}</p>
-                      <p className="text-xs text-muted-foreground">DA</p>
-                    </div>
-                    <div>
-                      <p className="text-2xl font-bold">{(site.metrics.traffic / 1000).toFixed(0)}K</p>
-                      <p className="text-xs text-muted-foreground">Tráfego</p>
-                    </div>
-                    <div>
-                      <p className="text-2xl font-bold">R${site.metrics.price}</p>
-                      <p className="text-xs text-muted-foreground">Preço</p>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    {site.features.map((feature, idx) => (
-                      <div key={idx} className="flex items-center space-x-2 text-sm">
-                        <CheckCircle className="w-4 h-4 text-success" />
-                        <span>{feature}</span>
-                      </div>
-                    ))}
-                  </div>
-                  
-                  <Button 
-                    className="w-full bg-gradient-to-r from-primary to-primary-hover"
-                    onClick={() => handleSelectNetworkSite(site.url)}
-                  >
-                    Escolher Este Site
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+          {step === 1 && <CreateBacklinkForm onSubmit={handleStep1Submit} onCancel={resetFlow} isSubmitting={isSubmitting} />}
+          {step === 2 && step1Data && <SelectNetworkSiteView clientSiteId={Number(step1Data.client_site_id)} onSiteSelect={handleSiteSelection} />}
         </DialogContent>
       </Dialog>
-    </div>
+
+      <AlertDialog open={isAlertOpen} onOpenChange={(open) => { setIsAlertOpen(open); if (!open) setAlertActionType(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {alertActionType === 'create' ? 'Confirmar Criação do Backlink?' : 'Confirmar Exclusão?'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {alertActionType === 'create' ? (
+                <>
+                  Você está prestes a criar um backlink de <strong>{selectedNetworkSite?.domain}</strong> para <strong>{step1Data?.target_url}</strong> com o texto âncora "<strong>{step1Data?.anchor_text}</strong>".
+                </>
+              ) : (
+                <>
+                  Você tem certeza que deseja excluir o backlink para "<strong>{backlinkToDelete?.article_title || backlinkToDelete?.target_url}</strong>"?
+                  Esta ação não pode ser desfeita.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isSubmitting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleAlertAction} disabled={isSubmitting}>
+              {alertActionType === 'create' ? (isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Confirmar") : "Excluir"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 };
 
-export default Backlinks;
+export default BacklinksPage;

@@ -11,7 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const { login, loading } = useAuth();
+  const { login, loading, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
@@ -93,7 +93,7 @@ const Login = () => {
               </div>
             </CardContent>
 
-            <CardFooter className="space-y-4">
+            <CardFooter className="space-y-4 flex flex-col">
               <Button 
                 type="submit" 
                 className="w-full bg-gradient-to-r from-primary to-primary-hover hover:shadow-glow transition-all duration-300"
@@ -109,11 +109,20 @@ const Login = () => {
                 )}
               </Button>
               
-              <div className="text-center text-sm text-muted-foreground">
-                <p>Conta de teste:</p>
-                <p><strong>Cliente:</strong> cliente@email.com / 123</p>
-                <p><strong>Admin:</strong> admin@email.com / admin</p>
-              </div>
+              <Button 
+                variant="outline" 
+                className="w-full flex items-center gap-2"
+                onClick={signInWithGoogle}
+                disabled={loading}
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M22.44 12.22c0-.79-.07-1.54-.19-2.28H12v4.51h6.17c-.25 1.26-1.04 2.32-2.23 3.02v3.69h4.73c2.76-2.53 4.35-6.27 4.35-10.02z" fill="#4285F4"/>
+                  <path d="M12 23c3.24 0 5.95-1.08 7.93-2.94l-4.73-3.69c-1.31.88-3 1.4-4.2 1.4-3.24 0-5.95-2.18-6.95-5.1H1.34v3.76C3.32 20.75 7.39 23 12 23z" fill="#34A853"/>
+                  <path d="M5.05 13.99c-.2-.59-.31-1.23-.31-1.99s.11-1.4.31-1.99V6.24H.32C-.27 7.49-.5 9.1-.5 11s.23 3.51.82 4.76L5.05 13.99z" fill="#FBBC05"/>
+                  <path d="M12 4.75c1.77 0 3.35.61 4.6 1.79l4.1-4.1C17.95 1.08 15.24 0 12 0 7.39 0 3.32 2.25 1.34 6.24L5.05 9.99c1-2.92 3.71-5.1 6.95-5.1z" fill="#EA4335"/>
+                </svg>
+                Entrar com Google
+              </Button>
             </CardFooter>
           </form>
         </Card>

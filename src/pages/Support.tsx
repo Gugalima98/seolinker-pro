@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -26,27 +26,125 @@ import {
   Video,
   Send
 } from 'lucide-react';
-import { mockTickets, Ticket, TicketMessage } from '@/data/tickets';
 import { useToast } from '@/hooks/use-toast';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { supabase } from '@/lib/supabase'; // Import supabase client
+
+interface TicketMessage {
+  id: string;
+  ticket_id: string;
+  author_id: string;
+  author_role: 'user' | 'admin' | 'client';
+  message: string;
+  created_at: string;
+  author?: { full_name: string | null }; // Updated structure to match backend
+}
 
 const Support = () => {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [tickets, setTickets] = useState(mockTickets);
+  const [tickets, setTickets] = useState<Ticket[]>([]);
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isTicketDetailOpen, setIsTicketDetailOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [newMessage, setNewMessage] = useState('');
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const [newTicket, setNewTicket] = useState({
     subject: '',
     description: '',
     category: 'Geral' as const,
     priority: 'Média' as const
   });
+
+  const fetchTickets = async () => {
+    if (!user?.id) return; // Ensure user is logged in
+
+    try {
+      const { data, error } = await supabase.functions.invoke('get-tickets', {
+        body: {
+          user_id: user.id,
+          searchTerm,
+          statusFilter,
+          isAdminRequest: false, // This is the user view
+        },
+      });
+
+      if (error) throw error;
+
+      setTickets(data.tickets.map((ticket: any) => {
+        const messagesCount = (ticket.ticket_messages && ticket.ticket_messages.length > 0) ? ticket.ticket_messages[0].count : 0;
+        return {
+          ...ticket,
+          createdAt: ticket.created_at,
+          updatedAt: ticket.updated_at,
+          messages: [], // Will be populated when details are fetched
+          messagesCount,
+        };
+      }));
+    } catch (error: any) {
+      console.error("Error fetching tickets:", error);
+      toast({
+        title: "Erro ao carregar tickets",
+        description: error.message || "Ocorreu um erro ao buscar seus tickets.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  useEffect(() => {
+    fetchTickets();
+  }, [user?.id, searchTerm, statusFilter]);
+
+  useEffect(() => {
+    if (!selectedTicket?.id) return;
+
+    const channel = supabase
+      .channel(`ticket_messages_for_${selectedTicket.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'ticket_messages',
+          filter: `ticket_id=eq.${selectedTicket.id}`,
+        },
+        (payload) => {
+          console.log('Support.tsx: Received new message via Realtime:', payload.new);
+          console.log('Support.tsx: Realtime payload.new.created_at:', payload.new.created_at);
+          console.log('Support.tsx: new Date(payload.new.created_at):', new Date(payload.new.created_at));
+          
+          const receivedMessage = payload.new as TicketMessage;
+
+          setSelectedTicket(prevTicket => {
+            if (!prevTicket) return null;
+            // Check if the message already exists to prevent duplicates from optimistic update
+            if (prevTicket.ticket_messages.some(msg => msg.id === receivedMessage.id)) {
+              return prevTicket;
+            }
+            return {
+              ...prevTicket,
+              ticket_messages: [...(prevTicket.ticket_messages || []), receivedMessage],
+            };
+          });
+        }
+      )
+      .subscribe();
+
+    console.log('Support.tsx: Subscribing to Realtime for ticket:', selectedTicket.id);
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [selectedTicket?.id]);
+
+  useEffect(() => {
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTo({ top: messagesContainerRef.current.scrollHeight, behavior: 'smooth' });
+    }
+  }, [selectedTicket?.ticket_messages]);
 
   const filteredTickets = tickets.filter(ticket => {
     const matchesSearch = 
@@ -58,76 +156,100 @@ const Support = () => {
     return matchesSearch && matchesStatus;
   });
 
-  const handleCreateTicket = () => {
-    if (!newTicket.subject || !newTicket.description) {
+  const handleCreateTicket = async () => {
+    if (!newTicket.subject || !newTicket.description || !user?.id) {
       toast({
         title: "Erro",
-        description: "Preencha todos os campos obrigatórios.",
+        description: "Preencha todos os campos obrigatórios e certifique-se de estar logado.",
         variant: "destructive",
       });
       return;
     }
 
-    const ticket: Ticket = {
-      id: Math.max(...tickets.map(t => t.id)) + 1,
-      subject: newTicket.subject,
-      description: newTicket.description,
-      status: 'Aberto',
-      priority: newTicket.priority,
-      category: newTicket.category,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      messages: [
-        {
-          id: 1,
-          author: 'user',
-          authorName: user?.name || 'Usuário',
-          message: newTicket.description,
-          timestamp: new Date().toISOString()
-        }
-      ]
-    };
+    try {
+      const { data, error } = await supabase.functions.invoke('create-ticket', {
+        body: {
+          user_id: user.id,
+          subject: newTicket.subject,
+          description: newTicket.description,
+          category: newTicket.category,
+          priority: newTicket.priority,
+        },
+      });
 
-    setTickets([ticket, ...tickets]);
-    setNewTicket({ subject: '', description: '', category: 'Geral', priority: 'Média' });
-    setIsCreateModalOpen(false);
+      if (error) throw error;
 
-    toast({
-      title: "Ticket criado com sucesso!",
-      description: "Nossa equipe responderá em breve.",
-    });
+      setTickets(prevTickets => [data.ticket, ...prevTickets]);
+      setNewTicket({ subject: '', description: '', category: 'Geral', priority: 'Média' });
+      setIsCreateModalOpen(false);
+
+      toast({
+        title: "Ticket criado com sucesso!",
+        description: "Nossa equipe responderá em breve.",
+      });
+    } catch (error: any) {
+      console.error("Error creating ticket:", error);
+      toast({
+        title: "Erro ao criar ticket",
+        description: error.message || "Ocorreu um erro inesperado.",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleSendMessage = () => {
-    if (!newMessage.trim() || !selectedTicket) return;
+  const handleSendMessage = async () => {
+    if (!newMessage.trim() || !selectedTicket || !user?.id) return;
 
-    const message: TicketMessage = {
-      id: Math.max(...selectedTicket.messages.map(m => m.id)) + 1,
-      author: 'user',
-      authorName: user?.name || 'Usuário',
-      message: newMessage,
-      timestamp: new Date().toISOString()
-    };
+    try {
+      const { data, error } = await supabase.functions.invoke('send-ticket-message', {
+        body: {
+          ticket_id: selectedTicket.id,
+          author_id: user.id,
+          author_role: user.role || 'user', // Assuming user.role is available, default to 'user'
+          message: newMessage,
+        },
+      });
 
-    const updatedTicket = {
-      ...selectedTicket,
-      messages: [...selectedTicket.messages, message],
-      updatedAt: new Date().toISOString()
-    };
+      if (error) throw error;
 
-    setTickets(prevTickets =>
-      prevTickets.map(ticket =>
-        ticket.id === selectedTicket.id ? updatedTicket : ticket
-      )
-    );
+      // Optimistically update the selected ticket with the new message
+      const message: TicketMessage = {
+        id: data.message.id,
+        ticket_id: selectedTicket.id,
+        author_id: user.id,
+        author_role: user.role || 'user',
+        message: data.message.message,
+        created_at: data.message.created_at,
+      };
 
-    setSelectedTicket(updatedTicket);
-    setNewMessage('');
+      const updatedTicket = {
+        ...selectedTicket,
+        messages: [...(selectedTicket.messages || []), message],
+        updatedAt: data.message.created_at, // Update with backend timestamp
+      };
 
-    toast({
-      title: "Mensagem enviada!",
-      description: "Nossa equipe responderá em breve.",
-    });
+      setTickets(prevTickets =>
+        prevTickets.map(ticket =>
+          ticket.id === selectedTicket.id ? updatedTicket : ticket
+        )
+      );
+
+      setSelectedTicket(updatedTicket);
+      console.log('Updated selectedTicket after sending message:', updatedTicket);
+      setNewMessage('');
+
+      toast({
+        title: "Mensagem enviada!",
+        description: "Nossa equipe responderá em breve.",
+      });
+    } catch (error: any) {
+      console.error("Error sending message:", error);
+      toast({
+        title: "Erro ao enviar mensagem",
+        description: error.message || "Ocorreu um erro inesperado.",
+        variant: "destructive",
+      });
+    }
   };
 
   const getStatusIcon = (status: string) => {
@@ -366,9 +488,26 @@ const Support = () => {
                   key={ticket.id} 
                   className="card-hover cursor-pointer animate-slide-up" 
                   style={{ animationDelay: `${index * 0.05}s` }}
-                  onClick={() => {
-                    setSelectedTicket(ticket);
-                    setIsTicketDetailOpen(true);
+                  onClick={async () => {
+                    console.log('Card clicked for ticket:', ticket.id);
+                    console.log('Current user ID:', user?.id);
+                    // Fetch detailed ticket info including messages
+                    try {
+                      const { data, error } = await supabase.functions.invoke('get-ticket-details', {
+                        body: { ticket_id: ticket.id, user_id: user?.id, isAdminRequest: false }, // Pass user_id
+                      });
+                      if (error) throw error;
+                      console.log('Support.tsx: Fetched ticket details:', data.ticket);
+                      setSelectedTicket(data.ticket);
+                      setIsTicketDetailOpen(true);
+                    } catch (error: any) {
+                      console.error("Error fetching ticket details:", error);
+                      toast({
+                        title: "Erro ao carregar detalhes do ticket",
+                        description: error.message || "Ocorreu um erro ao buscar os detalhes do ticket.",
+                        variant: "destructive",
+                      });
+                    }
                   }}
                 >
                   <CardContent className="p-6">
@@ -393,14 +532,14 @@ const Support = () => {
                           <span>#{ticket.id}</span>
                           <span>{ticket.category}</span>
                           <span>
-                            {formatDistanceToNow(new Date(ticket.createdAt), {
+                            {ticket.createdAt ? formatDistanceToNow(new Date(ticket.createdAt), {
                               addSuffix: true,
                               locale: ptBR
-                            })}
+                            }) : 'N/A'}
                           </span>
                           <span className="flex items-center space-x-1">
                             <MessageCircle className="w-4 h-4" />
-                            <span>{ticket.messages.length}</span>
+                            <span>{ticket.messagesCount || 0}</span>
                           </span>
                         </div>
                       </div>
@@ -576,6 +715,9 @@ const Support = () => {
                   {selectedTicket && getStatusIcon(selectedTicket.status)}
                   <span>#{selectedTicket?.id} - {selectedTicket?.subject}</span>
                 </DialogTitle>
+                <DialogDescription>
+                  Detalhes e histórico de mensagens do ticket.
+                </DialogDescription>
                 <div className="flex items-center space-x-2 mt-2">
                   {selectedTicket && (
                     <>
@@ -593,38 +735,51 @@ const Support = () => {
             </div>
           </DialogHeader>
           
-          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-            {selectedTicket?.messages.map((message) => (
-              <div
-                key={message.id}
-                className={`flex ${message.author === 'user' ? 'justify-end' : 'justify-start'}`}
-              >
+          <div ref={messagesContainerRef} className="flex-1 overflow-y-auto space-y-4 pr-2">
+            {selectedTicket?.ticket_messages?.map((message) => {
+              const isCurrentUser = message.author_id === user?.id;
+              const authorDisplayName = message.author?.full_name || (isCurrentUser ? 'Você' : message.author_role === 'admin' ? 'Admin' : 'Cliente');
+
+              return (
                 <div
-                  className={`max-w-[70%] p-4 rounded-lg ${
-                    message.author === 'user'
-                      ? 'bg-primary text-white'
-                      : 'bg-muted'
-                  }`}
+                  key={message.id}
+                  className={`flex ${isCurrentUser ? 'justify-end' : 'justify-start'}`}
                 >
-                  <div className="flex items-center space-x-2 mb-2">
-                    <Avatar className="w-6 h-6">
-                      <AvatarImage src={message.author === 'user' ? user?.avatar : undefined} />
-                      <AvatarFallback className="text-xs">
-                        {message.authorName.charAt(0)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <span className="text-sm font-medium">{message.authorName}</span>
-                    <span className="text-xs opacity-75">
-                      {formatDistanceToNow(new Date(message.timestamp), {
-                        addSuffix: true,
-                        locale: ptBR
-                      })}
-                    </span>
+                  <div
+                    className={`max-w-[70%] p-4 rounded-lg ${
+                      isCurrentUser
+                        ? 'bg-primary text-white'
+                        : 'bg-muted'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2 mb-2">
+                      <Avatar className="w-6 h-6">
+                        {/* TODO: Fetch author avatar based on author_id */}
+                                              <AvatarFallback className="text-xs">
+                                                {message.author?.full_name?.charAt(0) || (isCurrentUser ? 'E' : 'S')}
+                                              </AvatarFallback>                      </Avatar>
+                      <span className="text-sm font-medium">
+                        {message.author?.full_name || (isCurrentUser ? 'Eu' : 'Suporte')}
+                      </span>
+                      <span className="text-xs opacity-75">
+                        {(() => {
+                          const date = new Date(message.created_at);
+                          if (isNaN(date.getTime())) {
+                            console.error('Support.tsx: Invalid date for message:', message.id, message.created_at);
+                            return 'Data Inválida';
+                          }
+                          return formatDistanceToNow(date, {
+                            addSuffix: true,
+                            locale: ptBR
+                          });
+                        })()}
+                      </span>
+                    </div>
+                    <p className="text-sm">{message.message}</p>
                   </div>
-                  <p className="text-sm">{message.message}</p>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
           
           <div className="border-t pt-4">

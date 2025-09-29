@@ -1,0 +1,7 @@
+{
+  "imports": {
+    "stripe": "https://esm.sh/stripe@11.2.0?target=deno",
+    "stripe_deno_crypto_provider": "https://deno.land/x/stripe_deno_crypto_provider@v0.0.2/mod.ts",
+    "supabase-js": "https://esm.sh/@supabase/supabase-js@2"
+  }
+}

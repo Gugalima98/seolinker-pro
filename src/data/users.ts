@@ -1,7 +1,7 @@
 export interface User {
-  id: number;
+  id: string; // Changed from number to string to match Supabase UUID
   email: string;
-  password: string;
+  password?: string; // Made optional as it's not fetched
   role: 'client' | 'admin';
   name: string;
   avatar?: string;

@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/lib/supabase';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,55 +12,58 @@ import {
   TrendingUp, 
   Copy,
   Share,
-  Eye,
   MousePointer,
   Award,
   Calendar,
   BarChart3,
-  ExternalLink
+  Banknote, // Ícone para pagamentos
+  Loader2 // Ícone de carregamento
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 const Affiliate = () => {
   const { toast } = useToast();
-  const [affiliateCode] = useState('SEO2024PROF');
-  const [stats, setStats] = useState({
+  const { user } = useAuth();
+  
+  const [affiliate, setAffiliate] = useState<any>(null);
+  const [stats, setStats] = useState({ // Manteremos stats para dados futuros
     totalClicks: 0,
     conversions: 0,
     earnings: 0,
     pendingEarnings: 0
   });
+  const [loading, setLoading] = useState(true);
+  const [isOnboarding, setIsOnboarding] = useState(false);
 
-  // Simulate animated counters
   useEffect(() => {
-    const targetStats = {
-      totalClicks: 1247,
-      conversions: 23,
-      earnings: 2890,
-      pendingEarnings: 450
+    if (!user) return;
+
+    const initializeAffiliate = async () => {
+      setLoading(true);
+      try {
+        // Garante que o usuário se torne um afiliado e/ou busca os dados
+        const { data: affiliateData, error: affiliateError } = await supabase.functions.invoke('become-affiliate');
+        if (affiliateError) throw affiliateError;
+        setAffiliate(affiliateData);
+
+        // Busca as estatísticas reais do afiliado
+        const { data: statsData, error: statsError } = await supabase.functions.invoke('get-affiliate-stats');
+        if (statsError) throw statsError;
+        
+        setStats(statsData);
+
+      } catch (error: any) {
+        console.error("Erro ao carregar dados do afiliado:", error);
+        toast({ title: "Erro ao carregar dados", description: error.message, variant: "destructive" });
+      } finally {
+        setLoading(false);
+      }
     };
 
-    const animateCount = (target: number, setter: (value: number) => void) => {
-      let current = 0;
-      const increment = target / 50;
-      const timer = setInterval(() => {
-        current += increment;
-        if (current >= target) {
-          setter(target);
-          clearInterval(timer);
-        } else {
-          setter(Math.floor(current));
-        }
-      }, 30);
-    };
+    initializeAffiliate();
+  }, [user, toast]);
 
-    setTimeout(() => animateCount(targetStats.totalClicks, (val) => setStats(prev => ({ ...prev, totalClicks: val }))), 200);
-    setTimeout(() => animateCount(targetStats.conversions, (val) => setStats(prev => ({ ...prev, conversions: val }))), 400);
-    setTimeout(() => animateCount(targetStats.earnings, (val) => setStats(prev => ({ ...prev, earnings: val }))), 600);
-    setTimeout(() => animateCount(targetStats.pendingEarnings, (val) => setStats(prev => ({ ...prev, pendingEarnings: val }))), 800);
-  }, []);
-
-  const affiliateLink = `https://seobacklinks.com/ref/${affiliateCode}`;
+  const affiliateLink = affiliate ? `${window.location.origin}/ref/${affiliate.affiliate_code}` : '';
   const conversionRate = stats.totalClicks > 0 ? ((stats.conversions / stats.totalClicks) * 100).toFixed(2) : '0.00';
 
   const copyToClipboard = (text: string) => {
@@ -69,20 +74,38 @@ const Affiliate = () => {
     });
   };
 
-  const recentReferrals = [
-    { id: 1, email: 'user1@email.com', date: '2024-09-14', status: 'Convertido', commission: 125 },
-    { id: 2, email: 'user2@email.com', date: '2024-09-13', status: 'Pendente', commission: 125 },
-    { id: 3, email: 'user3@email.com', date: '2024-09-12', status: 'Convertido', commission: 125 },
-    { id: 4, email: 'user4@email.com', date: '2024-09-10', status: 'Convertido', commission: 125 },
-  ];
+  const handleOnboarding = async () => {
+    setIsOnboarding(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('create-stripe-connect-account');
+      if (error) throw error;
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    } catch (error: any) {
+      console.error("Erro durante o onboarding no Stripe:", error);
+      toast({ title: "Erro ao iniciar cadastro de pagamentos", description: error.message, variant: "destructive" });
+    } finally {
+      setIsOnboarding(false);
+    }
+  };
 
-  const monthlyData = [
-    { month: 'Maio', clicks: 890, conversions: 18, earnings: 2250 },
-    { month: 'Junho', clicks: 1050, conversions: 21, earnings: 2625 },
-    { month: 'Julho', clicks: 1180, conversions: 25, earnings: 3125 },
-    { month: 'Agosto', clicks: 1320, conversions: 28, earnings: 3500 },
-    { month: 'Setembro', clicks: 1247, conversions: 23, earnings: 2890 },
-  ];
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!affiliate) {
+    return (
+      <div className="text-center">
+        <p className="text-muted-foreground">Não foi possível carregar seus dados de afiliado.</p>
+        <p className="text-muted-foreground">Por favor, recarregue a página.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -90,64 +113,68 @@ const Affiliate = () => {
       <div className="text-center space-y-4">
         <h1 className="text-4xl font-bold gradient-text">Programa de Afiliados</h1>
         <p className="text-muted-foreground text-lg">
-          Ganhe 50% de comissão por cada cliente que você trouxer
+          Ganhe {affiliate.commission_rate * 100}% de comissão por cada cliente que você trouxer
         </p>
       </div>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {/* Os cards de estatísticas serão preenchidos com dados reais na Fase 3 */}
         <Card className="card-hover">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total de Cliques</CardTitle>
             <MousePointer className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold animate-count-up">{stats.totalClicks.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">
-              No seu link de afiliado
-            </p>
+            <div className="text-2xl font-bold">{stats.totalClicks.toLocaleString()}</div>
           </CardContent>
         </Card>
-
         <Card className="card-hover">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Conversões</CardTitle>
             <Users className="h-4 w-4 text-success" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-success animate-count-up">{stats.conversions}</div>
-            <p className="text-xs text-muted-foreground">
-              Taxa: {conversionRate}%
-            </p>
+            <div className="text-2xl font-bold text-success">{stats.conversions}</div>
           </CardContent>
         </Card>
-
         <Card className="card-hover">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Ganhos Totais</CardTitle>
             <DollarSign className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold animate-count-up">R$ {stats.earnings.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">
-              Comissões recebidas
-            </p>
+            <div className="text-2xl font-bold">R$ {stats.earnings.toLocaleString()}</div>
           </CardContent>
         </Card>
-
         <Card className="card-hover">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Ganhos Pendentes</CardTitle>
             <TrendingUp className="h-4 w-4 text-warning" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-warning animate-count-up">R$ {stats.pendingEarnings.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">
-              A ser pago em 7 dias
-            </p>
+            <div className="text-2xl font-bold text-warning">R$ {stats.pendingEarnings.toLocaleString()}</div>
           </CardContent>
         </Card>
       </div>
+
+      {/* Payout Onboarding Section */}
+      <Card className="border-primary/20">
+        <CardHeader>
+          <CardTitle className="flex items-center"><Banknote className="mr-2"/> Receba seus Pagamentos</CardTitle>
+          <CardDescription>
+            {affiliate.stripe_connect_account_id 
+              ? "Sua conta de pagamentos está configurada. Você pode atualizar seus dados a qualquer momento."
+              : "Para receber suas comissões, você precisa configurar uma conta de pagamentos com nosso parceiro Stripe."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button onClick={handleOnboarding} disabled={isOnboarding}>
+            {isOnboarding ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            {affiliate.stripe_connect_account_id ? "Atualizar Dados de Pagamento" : "Configurar Pagamentos"}
+          </Button>
+        </CardContent>
+      </Card>
 
       {/* Affiliate Link Section */}
       <Card className="bg-gradient-to-r from-primary/5 to-primary-hover/5 border-primary/20">
@@ -179,7 +206,7 @@ const Affiliate = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="text-center p-4 bg-background rounded-lg">
               <Award className="w-8 h-8 text-primary mx-auto mb-2" />
-              <h4 className="font-semibold">50% Comissão</h4>
+              <h4 className="font-semibold">{affiliate.commission_rate * 100}% Comissão</h4>
               <p className="text-sm text-muted-foreground">Por cada venda</p>
             </div>
             <div className="text-center p-4 bg-background rounded-lg">
@@ -206,86 +233,7 @@ const Affiliate = () => {
 
         {/* Overview */}
         <TabsContent value="overview" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Monthly Performance */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Performance Mensal</CardTitle>
-                <CardDescription>
-                  Acompanhe seu desempenho nos últimos 5 meses
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {monthlyData.map((month, index) => (
-                    <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
-                      <div>
-                        <h4 className="font-medium">{month.month}</h4>
-                        <p className="text-sm text-muted-foreground">
-                          {month.clicks} cliques • {month.conversions} conversões
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-bold text-success">R$ {month.earnings.toLocaleString()}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {((month.conversions / month.clicks) * 100).toFixed(1)}% taxa
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Commission Tiers */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Níveis de Comissão</CardTitle>
-                <CardDescription>
-                  Ganhe mais conforme suas vendas aumentam
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="p-4 border-2 border-primary/20 bg-primary/5 rounded-lg">
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="font-semibold text-primary">Nível Atual: Pro</h4>
-                      <Badge className="bg-primary text-white">50%</Badge>
-                    </div>
-                    <p className="text-sm text-muted-foreground mb-3">
-                      1-50 vendas por mês
-                    </p>
-                    <div className="w-full bg-muted rounded-full h-2">
-                      <div className="bg-primary h-2 rounded-full" style={{ width: '60%' }}></div>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      23/50 vendas para o próximo nível
-                    </p>
-                  </div>
-                  
-                  <div className="p-4 border rounded-lg opacity-75">
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="font-semibold">Expert</h4>
-                      <Badge variant="outline">60%</Badge>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      51-100 vendas por mês
-                    </p>
-                  </div>
-                  
-                  <div className="p-4 border rounded-lg opacity-50">
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="font-semibold">Master</h4>
-                      <Badge variant="outline">70%</Badge>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      100+ vendas por mês
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+          <p className="text-center text-muted-foreground">Mais estatísticas detalhadas serão adicionadas em breve.</p>
         </TabsContent>
 
         {/* Referrals */}
@@ -299,25 +247,29 @@ const Affiliate = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {recentReferrals.map((referral) => (
-                  <div key={referral.id} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="space-y-1">
-                      <p className="font-medium">{referral.email}</p>
-                      <p className="text-sm text-muted-foreground">
-                        Indicado em {new Date(referral.date).toLocaleDateString('pt-BR')}
-                      </p>
+                {stats.recentReferrals && stats.recentReferrals.length > 0 ? (
+                  stats.recentReferrals.map((referral: any) => (
+                    <div key={referral.id} className="flex items-center justify-between p-4 border rounded-lg">
+                      <div className="space-y-1">
+                        <p className="font-medium">{referral.email}</p>
+                        <p className="text-sm text-muted-foreground">
+                          Indicado em {new Date(referral.created_at).toLocaleDateString('pt-BR')}
+                        </p>
+                      </div>
+                      <div className="text-right space-y-1">
+                        <Badge 
+                          variant={referral.status === 'converted' ? 'default' : 'secondary'}
+                          className={referral.status === 'converted' ? 'bg-success text-success-foreground' : ''}
+                        >
+                          {referral.status}
+                        </Badge>
+                        <p className="text-sm font-bold">R$ {referral.commission_amount || 0}</p>
+                      </div>
                     </div>
-                    <div className="text-right space-y-1">
-                      <Badge 
-                        variant={referral.status === 'Convertido' ? 'default' : 'secondary'}
-                        className={referral.status === 'Convertido' ? 'status-published' : 'status-pending'}
-                      >
-                        {referral.status}
-                      </Badge>
-                      <p className="text-sm font-bold">R$ {referral.commission}</p>
-                    </div>
-                  </div>
-                ))}
+                  ))
+                ) : (
+                  <p className="text-muted-foreground text-center">Nenhuma indicação recente.</p>
+                )}
               </div>
             </CardContent>
           </Card>

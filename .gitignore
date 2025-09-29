@@ -22,3 +22,22 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Arquivos de ambiente
+.env
+.env.*
+!/.env.example
+
+# Arquivos de dados e planilhas geradas
+*.csv
+db.json
+dados_brutos_vps.txt
+
+# Scripts de migração temporários
+*.cjs
+migracao.js
+migracao.js.js
+*.py
+
+# Pastas de dados
+backlinks_vps/

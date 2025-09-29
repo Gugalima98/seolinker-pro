@@ -1,0 +1,1 @@
+ALTER TABLE backlinks ADD COLUMN log TEXT;
