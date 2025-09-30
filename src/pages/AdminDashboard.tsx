@@ -6,29 +6,45 @@ import {
   Globe, 
   LinkIcon, 
   Ticket, 
-  BarChart,
   UsersRound,
-  LayoutDashboard,
-  Settings,
-  BookOpen,
   Network,
   FileText,
-  Key
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '@/lib/supabase';
+import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
+  const [stats, setStats] = useState({
+    totalUsers: 0,
+    totalClientSites: 0,
+    backlinksThisMonth: 0,
+    openTickets: 0,
+    monthlyUserData: [],
+    siteTypeChartData: [],
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Simular carregamento de dados
-    const timer = setTimeout(() => {
-      setLoading(false);
-    }, 1000); // Simula um delay de 1 segundo
+    const fetchStats = async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke('get-admin-dashboard-stats');
+        if (error) throw error;
+        if (data) {
+          setStats(prevStats => ({ ...prevStats, ...data }));
+        }
+      } catch (error) {
+        console.error('Error fetching dashboard stats:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-    return () => clearTimeout(timer);
+    fetchStats();
   }, []);
+
+  const PIE_CHART_COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
 
   if (loading) {
     return (
@@ -64,7 +80,7 @@ const AdminDashboard = () => {
             <Users className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold animate-count-up">120</div> {/* Mock data */}
+            <div className="text-2xl font-bold animate-count-up">{stats.totalUsers}</div>
             <p className="text-xs text-muted-foreground">
               Usuários cadastrados na plataforma
             </p>
@@ -77,7 +93,7 @@ const AdminDashboard = () => {
             <Globe className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold animate-count-up">45</div> {/* Mock data */}
+            <div className="text-2xl font-bold animate-count-up">{stats.totalClientSites}</div>
             <p className="text-xs text-muted-foreground">
               Sites de clientes cadastrados
             </p>
@@ -90,7 +106,7 @@ const AdminDashboard = () => {
             <LinkIcon className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold animate-count-up">320</div> {/* Mock data */}
+            <div className="text-2xl font-bold animate-count-up">{stats.backlinksThisMonth}</div>
             <p className="text-xs text-muted-foreground">
               Backlinks gerados no mês atual
             </p>
@@ -103,7 +119,7 @@ const AdminDashboard = () => {
             <Ticket className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold animate-count-up">8</div> {/* Mock data */}
+            <div className="text-2xl font-bold animate-count-up">{stats.openTickets}</div>
             <p className="text-xs text-muted-foreground">
               Tickets de suporte aguardando resposta
             </p>
@@ -111,31 +127,53 @@ const AdminDashboard = () => {
         </Card>
       </div>
 
-      {/* Gráficos (Placeholders) */}
+      {/* Gráficos */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <Card className="animate-slide-up">
           <CardHeader>
             <CardTitle>Novos Usuários por Mês</CardTitle>
-            <CardDescription>Gráfico de novos cadastros ao longo do tempo.</CardDescription>
+            <CardDescription>Novos cadastros nos últimos 6 meses.</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="h-64 flex items-center justify-center text-muted-foreground">
-              {/* Placeholder para o gráfico de novos usuários */}
-              Gráfico de Novos Usuários (Chart.js/ApexCharts)
-            </div>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={stats.monthlyUserData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" />
+                <YAxis />
+                <Tooltip />
+                <Legend />
+                <Bar dataKey="Novos Usuários" fill="#8884d8" />
+              </BarChart>
+            </ResponsiveContainer>
           </CardContent>
         </Card>
 
         <Card className="animate-slide-up" style={{ animationDelay: '0.1s' }}>
           <CardHeader>
             <CardTitle>Distribuição de Tipos de Site</CardTitle>
-            <CardDescription>Gráfico de pizza mostrando a proporção de tipos de sites.</CardDescription>
+            <CardDescription>Proporção de tipos de sites dos clientes.</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="h-64 flex items-center justify-center text-muted-foreground">
-              {/* Placeholder para o gráfico de tipos de site */}
-              Gráfico de Tipos de Site (Chart.js/ApexCharts)
-            </div>
+            <ResponsiveContainer width="100%" height={300}>
+              <PieChart>
+                <Pie
+                  data={stats.siteTypeChartData}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  outerRadius={80}
+                  fill="#8884d8"
+                  dataKey="value"
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                >
+                  {(stats.siteTypeChartData || []).map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={PIE_CHART_COLORS[index % PIE_CHART_COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
           </CardContent>
         </Card>
       </div>

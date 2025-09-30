@@ -13,18 +13,25 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Eye, Globe, BarChart2, LinkIcon } from 'lucide-react';
 
+// Extend the ClientSite interface to include the user email
+interface AdminClientSite extends ClientSite {
+  user_email: string;
+}
+
 const AdminClientSitesView = () => {
-  const [sites, setSites] = useState<ClientSite[]>([]);
+  const [sites, setSites] = useState<AdminClientSite[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchSites = async () => {
       try {
-        const { data, error } = await supabase
-          .from('client_sites')
-          .select('*');
+        // Invoke the new edge function
+        const { data, error } = await supabase.functions.invoke('get-admin-client-sites');
+        
         if (error) throw error;
-        setSites(data || []);
+
+        // The data from the function is in a 'sites' property
+        setSites(data.sites || []);
       } catch (error) {
         console.error('Error fetching client sites:', error);
       } finally {
@@ -111,6 +118,7 @@ const AdminClientSitesView = () => {
               <TableHeader>
                 <TableRow>
                   <TableHead>ID</TableHead>
+                  <TableHead>Cliente</TableHead>
                   <TableHead>URL</TableHead>
                   <TableHead>Nicho</TableHead>
                   <TableHead>Tipo</TableHead>
@@ -122,6 +130,7 @@ const AdminClientSitesView = () => {
                 {sites.map((site) => (
                   <TableRow key={site.id}>
                     <TableCell className="font-medium">{site.id}</TableCell>
+                    <TableCell>{site.user_email}</TableCell>
                     <TableCell>{site.url}</TableCell>
                     <TableCell>{site.niche_primary}</TableCell>
                     <TableCell>{site.type}</TableCell>
