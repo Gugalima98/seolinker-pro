@@ -493,77 +493,76 @@ const Sites = () => {
             >
               <CardHeader>
                 <div className="flex items-start justify-between">
-                  <div className="space-y-1">
-                    <CardTitle className="text-lg flex items-center space-x-2">
-                      <Globe className="h-5 w-5 text-primary" />
-                      <span className="truncate">{site.url}</span>
-                      <Button variant="ghost" size="sm" className="p-0 h-auto w-auto" onClick={(e) => { e.stopPropagation(); window.open(`https://${site.url}`, '_blank'); }}>
-                        <ExternalLink className="h-4 w-4" />
-                      </Button>
-                    </CardTitle>
-                    <div className="space-y-2">
-                      <p className="text-sm text-muted-foreground">Nichos:</p>
-                      <div className="flex flex-wrap items-center gap-2 min-w-0">
-                        {site.niche_primary && (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Badge variant="secondary" className="block flex-shrink-0 max-w-[90px] overflow-hidden text-ellipsis whitespace-nowrap">
-                                  {site.niche_primary}
-                                </Badge>
-                              </TooltipTrigger>
-                              <TooltipContent side="bottom">
-                                <p>{site.niche_primary}</p>
-                              </TooltipContent>
-                            </Tooltip>
-                        )}
-                        {site.niche_secondary && (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Badge variant="secondary" className="block flex-shrink-0 max-w-[90px] overflow-hidden text-ellipsis whitespace-nowrap">
-                                  {site.niche_secondary}
-                                </Badge>
-                              </TooltipTrigger>
-                              <TooltipContent side="bottom">
-                                <p>{site.niche_secondary}</p>
-                              </TooltipContent>
-                            </Tooltip>
-                        )}
-                        {site.niche_tertiary && (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Badge variant="secondary" className="block flex-shrink-0 max-w-[90px] overflow-hidden text-ellipsis whitespace-nowrap">
-                                  {site.niche_tertiary}
-                                </Badge>
-                              </TooltipTrigger>
-                              <TooltipContent side="bottom">
-                                <p>{site.niche_tertiary}</p>
-                              </TooltipContent>
-                            </Tooltip>
-                        )}
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <p className="text-sm text-muted-foreground">Tipo de Site:</p>
-                      {
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Badge variant="outline" className="block flex-shrink-0 max-w-[90px] overflow-hidden text-ellipsis whitespace-nowrap">
-                                {site.type}
-                              </Badge>
-                            </TooltipTrigger>
-                            <TooltipContent side="bottom">
-                              <p>{site.type}</p>
-                            </TooltipContent>
-                          </Tooltip>
-                      }
-                    </div>                  </div>
-                  <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive-foreground" onClick={(e) => { e.stopPropagation(); handleDeleteSite(site.id); }}>
-                    <Trash className="h-4 w-4" />
-                  </Button>
-                </div>
-              </CardHeader>
-              
-              <CardContent className="space-y-4">
+                                      <div className="space-y-1">
+                                      <CardTitle className="text-lg flex items-center space-x-2">
+                                        <Globe className="h-5 w-5 text-primary" />
+                                        <span className="truncate">{site.url}</span>
+                                        <Button variant="ghost" size="sm" className="p-0 h-auto w-auto" onClick={(e) => { e.stopPropagation(); window.open(`https://${site.url}`, '_blank'); }}>
+                                          <ExternalLink className="h-4 w-4" />
+                                        </Button>
+                                      </CardTitle>
+                                      <div className="space-y-2">
+                                        <p className="text-sm text-muted-foreground">Nichos:</p>
+                                        <div className="flex flex-wrap items-center gap-2 min-w-0">
+                                          {site.niche_primary && (
+                                              <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                  <Badge variant="secondary" className="block flex-shrink-0 max-w-[90px] overflow-hidden text-ellipsis whitespace-nowrap">
+                                                    {site.niche_primary}
+                                                  </Badge>
+                                                </TooltipTrigger>
+                                                <TooltipContent side="bottom">
+                                                  <p>{site.niche_primary}</p>
+                                                </TooltipContent>
+                                              </Tooltip>
+                                          )}
+                                          {site.niche_secondary && (
+                                              <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                  <Badge variant="secondary" className="block flex-shrink-0 max-w-[90px] overflow-hidden text-ellipsis whitespace-nowrap">
+                                                    {site.niche_secondary}
+                                                  </Badge>
+                                                </TooltipTrigger>
+                                                <TooltipContent side="bottom">
+                                                  <p>{site.niche_secondary}</p>
+                                                </TooltipContent>
+                                              </Tooltip>
+                                          )}
+                                          {site.niche_tertiary && (
+                                              <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                  <Badge variant="secondary" className="block flex-shrink-0 max-w-[90px] overflow-hidden text-ellipsis whitespace-nowrap">
+                                                    {site.niche_tertiary}
+                                                  </Badge>
+                                                </TooltipTrigger>
+                                                <TooltipContent side="bottom">
+                                                  <p>{site.niche_tertiary}</p>
+                                                </TooltipContent>
+                                              </Tooltip>
+                                          )}
+                                        </div>
+                                      </div>
+                                      <div className="space-y-2">
+                                        <p className="text-sm text-muted-foreground">Tipo de Site:</p>
+                                        {
+                                            <Tooltip>
+                                              <TooltipTrigger asChild>
+                                                <Badge variant="outline" className="block flex-shrink-0 max-w-[90px] overflow-hidden text-ellipsis whitespace-nowrap">
+                                                  {site.type}
+                                                </Badge>
+                                              </TooltipTrigger>
+                                              <TooltipContent side="bottom">
+                                                <p>{site.type}</p>
+                                              </TooltipContent>
+                                            </Tooltip>
+                                        }
+                                      </div>                  </div>
+                                    <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive-foreground" onClick={(e) => { e.stopPropagation(); handleDeleteSite(site.id); }}>
+                                      <Trash className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
                 {site.status === 'pending' ? (
                   <div className="flex flex-col items-center justify-center h-32 text-muted-foreground p-4">
                     <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />

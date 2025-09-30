@@ -62,12 +62,21 @@ serve(async (_req) => {
 
         // 2. Fetch WordPress Post Content
         // Simplified URL construction for debugging
+<<<<<<< HEAD
         const postApiUrl = `${networkSite.api_url}/posts/${reviewItem.wp_post_id_original}`; // Direct use of api_url
         const authHeader = `Basic ${btoa(`${networkSite.username}:${networkSite.application_password}`)}`;
 
         console.log(`Attempting to fetch post content for review item ${reviewItem.id} from URL: ${postApiUrl}`);
 
         const response = await fetch(postApiUrl, {
+=======
+        const postUrl = `${networkSite.api_url}/posts/${reviewItem.wp_post_id_original}`; // Direct use of api_url
+        const authHeader = `Basic ${btoa(`${networkSite.username}:${networkSite.application_password}`)}`;
+
+        console.log(`Attempting to fetch post content for review item ${reviewItem.id} from URL: ${postUrl}`);
+
+        const response = await fetch(postUrl, {
+>>>>>>> 613e8d118da6e6f17540fbc2d40e9393326c947e
           headers: { "Authorization": authHeader },
         });
 

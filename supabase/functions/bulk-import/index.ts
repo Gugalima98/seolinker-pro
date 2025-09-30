@@ -51,6 +51,7 @@ Deno.serve(async (req) => {
           try {
             if (!row.email) throw new Error('Coluna \'email\' é obrigatória.');
 
+<<<<<<< HEAD
                                     let userId: string;
                                     let userEmail: string = row.email;
                         
@@ -182,6 +183,76 @@ Deno.serve(async (req) => {
                             console.log(` -> Assinatura criada/atualizada para ${userEmail}.`);
                         }
             
+=======
+            let userId: string;
+            let userEmail: string = row.email;
+
+            const { data: existingUsers, error: findError } = await supabaseAdmin.rpc('get_user_by_email', { p_email: row.email });
+            if (findError) throw findError;
+            const existingUser = existingUsers && existingUsers.length > 0 ? existingUsers[0] : null;
+
+            if (existingUser) {
+              userId = existingUser.id;
+            } else {
+              const { data: newUserResponse, error: createError } = await supabaseAdmin.auth.admin.createUser({
+                email: row.email,
+                password: '8links@123', // Usa a senha padrão definida
+                email_confirm: true,
+              });
+              if (createError) throw createError;
+              userId = newUserResponse.user.id;
+            }
+
+            await supabaseAdmin.from('profiles').update({ 
+                role: row.role || 'client', 
+                name: row.name 
+            }).eq('id', userId);
+
+            if (row.plan_id && priceMap[row.plan_id]) {
+              const { data: profile, error: profileError } = await supabaseAdmin.from('profiles').select('*').eq('id', userId).single();
+              if (profileError) throw profileError;
+
+              // VERIFICAÇÃO DE SEGURANÇA: Pula se já tiver uma assinatura ativa ou em trial
+              const activeStatuses = ['active', 'trialing'];
+              if (profile.subscription_status && activeStatuses.includes(profile.subscription_status)) {
+                errors.push(`Linha ${successCount + errorCount + 1}: Usuário ${userEmail} já possui uma assinatura ativa (${profile.subscription_status}). Criação de assinatura pulada.`);
+                successCount++; // Conta como sucesso, pois o usuário foi processado conforme a regra
+                continue; // Pula para o próximo usuário
+              }
+
+              let customerId = profile.stripe_customer_id;
+              if (!customerId) {
+                const customer = await stripe.customers.create({ 
+                  email: userEmail, 
+                  metadata: { supabase_user_id: userId }
+                });
+                customerId = customer.id;
+                await supabaseAdmin.from('profiles').update({ stripe_customer_id: customerId }).eq('id', userId);
+              }
+
+              const priceId = priceMap[row.plan_id];
+              const subscriptionParams: Stripe.SubscriptionCreateParams = {
+                customer: customerId, // Corrigido para usar customerId
+                items: [{ price: priceId }],
+                expand: ['latest_invoice.payment_intent'],
+                payment_behavior: 'default_incomplete',
+                collection_method: 'charge_automatically',
+              };
+              if (row.trial_end_date) {
+                const trialEndTimestamp = Math.floor(new Date(row.trial_end_date).getTime() / 1000);
+                subscriptionParams.trial_end = trialEndTimestamp;
+              }
+              const subscription = await stripe.subscriptions.create(subscriptionParams);
+
+              await supabaseAdmin.from('profiles').update({
+                stripe_subscription_id: subscription.id,
+                plan_id: row.plan_id,
+                subscription_status: subscription.status,
+                subscription_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+              }).eq('id', userId);
+            }
+
+>>>>>>> 613e8d118da6e6f17540fbc2d40e9393326c947e
             successCount++;
           } catch (e) {
             errorCount++;

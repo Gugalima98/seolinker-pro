@@ -42,6 +42,8 @@ serve(async (req) => {
 
     const priceId = priceMap[planId];
 
+    console.log('SITE_URL from environment:', Deno.env.get('SITE_URL')); // Temporary log for debugging
+
     const sessionPayload: Stripe.Checkout.SessionCreateParams = {
       payment_method_types: ['card'],
       line_items: [

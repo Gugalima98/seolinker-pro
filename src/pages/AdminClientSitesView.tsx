@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Eye, Globe, BarChart2, LinkIcon } from 'lucide-react';
 
+<<<<<<< HEAD
 // Extend the ClientSite interface to include the user email
 interface AdminClientSite extends ClientSite {
   user_email: string;
@@ -20,11 +21,16 @@ interface AdminClientSite extends ClientSite {
 
 const AdminClientSitesView = () => {
   const [sites, setSites] = useState<AdminClientSite[]>([]);
+=======
+const AdminClientSitesView = () => {
+  const [sites, setSites] = useState<ClientSite[]>([]);
+>>>>>>> 613e8d118da6e6f17540fbc2d40e9393326c947e
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchSites = async () => {
       try {
+<<<<<<< HEAD
         // Invoke the new edge function
         const { data, error } = await supabase.functions.invoke('get-admin-client-sites');
         
@@ -32,6 +38,13 @@ const AdminClientSitesView = () => {
 
         // The data from the function is in a 'sites' property
         setSites(data.sites || []);
+=======
+        const { data, error } = await supabase
+          .from('client_sites')
+          .select('*');
+        if (error) throw error;
+        setSites(data || []);
+>>>>>>> 613e8d118da6e6f17540fbc2d40e9393326c947e
       } catch (error) {
         console.error('Error fetching client sites:', error);
       } finally {
@@ -118,7 +131,10 @@ const AdminClientSitesView = () => {
               <TableHeader>
                 <TableRow>
                   <TableHead>ID</TableHead>
+<<<<<<< HEAD
                   <TableHead>Cliente</TableHead>
+=======
+>>>>>>> 613e8d118da6e6f17540fbc2d40e9393326c947e
                   <TableHead>URL</TableHead>
                   <TableHead>Nicho</TableHead>
                   <TableHead>Tipo</TableHead>
@@ -130,7 +146,10 @@ const AdminClientSitesView = () => {
                 {sites.map((site) => (
                   <TableRow key={site.id}>
                     <TableCell className="font-medium">{site.id}</TableCell>
+<<<<<<< HEAD
                     <TableCell>{site.user_email}</TableCell>
+=======
+>>>>>>> 613e8d118da6e6f17540fbc2d40e9393326c947e
                     <TableCell>{site.url}</TableCell>
                     <TableCell>{site.niche_primary}</TableCell>
                     <TableCell>{site.type}</TableCell>

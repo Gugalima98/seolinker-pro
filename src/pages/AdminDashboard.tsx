@@ -6,6 +6,7 @@ import {
   Globe, 
   LinkIcon, 
   Ticket, 
+<<<<<<< HEAD
   UsersRound,
   Network,
   FileText,
@@ -46,6 +47,32 @@ const AdminDashboard = () => {
 
   const PIE_CHART_COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
 
+=======
+  BarChart,
+  UsersRound,
+  LayoutDashboard,
+  Settings,
+  BookOpen,
+  Network,
+  FileText,
+  Key
+} from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+
+const AdminDashboard = () => {
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Simular carregamento de dados
+    const timer = setTimeout(() => {
+      setLoading(false);
+    }, 1000); // Simula um delay de 1 segundo
+
+    return () => clearTimeout(timer);
+  }, []);
+
+>>>>>>> 613e8d118da6e6f17540fbc2d40e9393326c947e
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -80,7 +107,11 @@ const AdminDashboard = () => {
             <Users className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
+<<<<<<< HEAD
             <div className="text-2xl font-bold animate-count-up">{stats.totalUsers}</div>
+=======
+            <div className="text-2xl font-bold animate-count-up">120</div> {/* Mock data */}
+>>>>>>> 613e8d118da6e6f17540fbc2d40e9393326c947e
             <p className="text-xs text-muted-foreground">
               Usuários cadastrados na plataforma
             </p>
@@ -93,7 +124,11 @@ const AdminDashboard = () => {
             <Globe className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
+<<<<<<< HEAD
             <div className="text-2xl font-bold animate-count-up">{stats.totalClientSites}</div>
+=======
+            <div className="text-2xl font-bold animate-count-up">45</div> {/* Mock data */}
+>>>>>>> 613e8d118da6e6f17540fbc2d40e9393326c947e
             <p className="text-xs text-muted-foreground">
               Sites de clientes cadastrados
             </p>
@@ -106,7 +141,11 @@ const AdminDashboard = () => {
             <LinkIcon className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
+<<<<<<< HEAD
             <div className="text-2xl font-bold animate-count-up">{stats.backlinksThisMonth}</div>
+=======
+            <div className="text-2xl font-bold animate-count-up">320</div> {/* Mock data */}
+>>>>>>> 613e8d118da6e6f17540fbc2d40e9393326c947e
             <p className="text-xs text-muted-foreground">
               Backlinks gerados no mês atual
             </p>
@@ -119,7 +158,11 @@ const AdminDashboard = () => {
             <Ticket className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
+<<<<<<< HEAD
             <div className="text-2xl font-bold animate-count-up">{stats.openTickets}</div>
+=======
+            <div className="text-2xl font-bold animate-count-up">8</div> {/* Mock data */}
+>>>>>>> 613e8d118da6e6f17540fbc2d40e9393326c947e
             <p className="text-xs text-muted-foreground">
               Tickets de suporte aguardando resposta
             </p>
@@ -127,11 +170,16 @@ const AdminDashboard = () => {
         </Card>
       </div>
 
+<<<<<<< HEAD
       {/* Gráficos */}
+=======
+      {/* Gráficos (Placeholders) */}
+>>>>>>> 613e8d118da6e6f17540fbc2d40e9393326c947e
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <Card className="animate-slide-up">
           <CardHeader>
             <CardTitle>Novos Usuários por Mês</CardTitle>
+<<<<<<< HEAD
             <CardDescription>Novos cadastros nos últimos 6 meses.</CardDescription>
           </CardHeader>
           <CardContent>
@@ -145,12 +193,22 @@ const AdminDashboard = () => {
                 <Bar dataKey="Novos Usuários" fill="#8884d8" />
               </BarChart>
             </ResponsiveContainer>
+=======
+            <CardDescription>Gráfico de novos cadastros ao longo do tempo.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-64 flex items-center justify-center text-muted-foreground">
+              {/* Placeholder para o gráfico de novos usuários */}
+              Gráfico de Novos Usuários (Chart.js/ApexCharts)
+            </div>
+>>>>>>> 613e8d118da6e6f17540fbc2d40e9393326c947e
           </CardContent>
         </Card>
 
         <Card className="animate-slide-up" style={{ animationDelay: '0.1s' }}>
           <CardHeader>
             <CardTitle>Distribuição de Tipos de Site</CardTitle>
+<<<<<<< HEAD
             <CardDescription>Proporção de tipos de sites dos clientes.</CardDescription>
           </CardHeader>
           <CardContent>
@@ -174,6 +232,15 @@ const AdminDashboard = () => {
                 <Legend />
               </PieChart>
             </ResponsiveContainer>
+=======
+            <CardDescription>Gráfico de pizza mostrando a proporção de tipos de sites.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-64 flex items-center justify-center text-muted-foreground">
+              {/* Placeholder para o gráfico de tipos de site */}
+              Gráfico de Tipos de Site (Chart.js/ApexCharts)
+            </div>
+>>>>>>> 613e8d118da6e6f17540fbc2d40e9393326c947e
           </CardContent>
         </Card>
       </div>
