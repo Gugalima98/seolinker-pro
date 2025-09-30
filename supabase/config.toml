@@ -1,0 +1,131 @@
+[functions.process-site]
+enabled = true
+verify_jwt = true
+import_map = "./functions/process-site/deno.json"
+entrypoint = "./functions/process-site/index.ts"
+
+[functions.get-user-subscription]
+enabled = true
+verify_jwt = true
+import_map = "./functions/get-user-subscription/deno.json"
+entrypoint = "./functions/get-user-subscription/index.ts"
+
+[functions.create-user-subscription]
+enabled = true
+verify_jwt = true
+import_map = "./functions/create-user-subscription/deno.json"
+entrypoint = "./functions/create-user-subscription/index.ts"
+
+[functions.cancel-user-subscription]
+enabled = true
+verify_jwt = true
+import_map = "./functions/_shared/deno.json"
+entrypoint = "./functions/cancel-user-subscription/index.ts"
+
+[functions.create-checkout-session]
+enabled = true
+verify_jwt = true
+import_map = "./functions/_shared/deno.json"
+entrypoint = "./functions/create-checkout-session/index.ts"
+
+[functions.create-user]
+enabled = true
+verify_jwt = true
+import_map = "./functions/_shared/deno.json"
+entrypoint = "./functions/create-user/index.ts"
+
+[functions.create-ticket]
+enabled = true
+verify_jwt = true
+import_map = "./functions/create-ticket/deno.json"
+entrypoint = "./functions/create-ticket/index.ts"
+
+[functions.get-tickets]
+enabled = true
+verify_jwt = true
+import_map = "./functions/get-tickets/deno.json"
+entrypoint = "./functions/get-tickets/index.ts"
+
+[functions.get-ticket-details]
+enabled = true
+verify_jwt = true
+import_map = "./functions/get-ticket-details/deno.json"
+entrypoint = "./functions/get-ticket-details/index.ts"
+
+[functions.send-ticket-message]
+enabled = true
+verify_jwt = true
+import_map = "./functions/send-ticket-message/deno.json"
+entrypoint = "./functions/send-ticket-message/index.ts"
+
+[functions.update-ticket-status]
+enabled = true
+verify_jwt = true
+import_map = "./functions/update-ticket-status/deno.json"
+entrypoint = "./functions/update-ticket-status/index.ts"
+
+[functions.delete-ticket]
+enabled = true
+verify_jwt = true
+import_map = "./functions/delete-ticket/deno.json"
+entrypoint = "./functions/delete-ticket/index.ts"
+
+[functions.delete-backlink]
+enabled = true
+verify_jwt = true
+import_map = "./functions/_shared/deno.json"
+entrypoint = "./functions/delete-backlink/index.ts"
+
+[functions.delete-user]
+enabled = true
+verify_jwt = true
+import_map = "./functions/_shared/deno.json"
+entrypoint = "./functions/delete-user/index.ts"
+
+[functions.get-users]
+enabled = true
+verify_jwt = true
+import_map = "./functions/_shared/deno.json"
+entrypoint = "./functions/get-users/index.ts"
+
+[functions.process-backlink]
+enabled = true
+verify_jwt = true
+import_map = "./functions/process-backlink/deno.json"
+entrypoint = "./functions/process-backlink/index.ts"
+
+[functions.stripe-webhook]
+enabled = true
+verify_jwt = false
+import_map = "./functions/_shared/deno.json"
+entrypoint = "./functions/stripe-webhook/index.ts"
+
+[functions.update-user-role]
+enabled = true
+verify_jwt = true
+import_map = "./functions/_shared/deno.json"
+entrypoint = "./functions/update-user-role/index.ts"
+
+[functions.update-user-subscription]
+enabled = true
+verify_jwt = true
+import_map = "./functions/_shared/deno.json"
+entrypoint = "./functions/update-user-subscription/index.ts"
+
+[functions.bulk-import]
+enabled = true
+verify_jwt = false # A verificação de admin é feita dentro da função
+import_map = "./functions/_shared/deno.json"
+entrypoint = "./functions/bulk-import/index.ts"
+
+[functions.process-enrichment-queue]
+enabled = true
+verify_jwt = false
+import_map = "./functions/process-enrichment-queue/deno.json"
+entrypoint = "./functions/process-enrichment-queue/index.ts"
+
+[functions.process-backlinks-to-review]
+enabled = true
+verify_jwt = false
+import_map = "./functions/process-backlinks-to-review/deno.json"
+entrypoint = "./functions/process-backlinks-to-review/index.ts"

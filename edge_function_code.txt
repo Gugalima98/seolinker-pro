@@ -1,0 +1,58 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { parseSitemap } from 'https://deno.land/x/sitemap@0.2.0/mod.ts';
+
+// Cabeçalhos para permitir a chamada da função a partir do seu site
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+serve(async (req) => {
+  // Lida com a requisição 'OPTIONS' do navegador (necessário para CORS)
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+
+  try {
+    const { siteUrl } = await req.json();
+    if (!siteUrl) {
+      throw new Error("A URL do site é obrigatória.");
+    }
+
+    console.log(`Processando site: ${siteUrl}`);
+
+    // 1. Buscar o sitemap
+    const sitemapUrl = new URL('/sitemap.xml', `http://${siteUrl.replace(/^https?:\/\//, '')}`).toString();
+    console.log(`Buscando sitemap em: ${sitemapUrl}`);
+    
+    const sitemapRes = await fetch(sitemapUrl);
+    if (!sitemapRes.ok) {
+      throw new Error(`Não foi possível buscar o sitemap. Status: ${sitemapRes.status}`);
+    }
+    
+    const sitemapXml = await sitemapRes.text();
+    const parsedSitemap = parseSitemap(sitemapXml);
+    
+    const urls = parsedSitemap.urlset.url.map(u => u.loc);
+    console.log(`Encontradas ${urls.length} URLs no sitemap.`);
+    console.log('Primeiras 10 URLs:', urls.slice(0, 10));
+
+    // PRÓXIMOS PASSOS (a implementar)
+    // 2. Chamar IA para definir nichos
+    // 3. Chamar API de SEO para buscar métricas
+    // 4. Atualizar a tabela client_sites com os dados
+
+    return new Response(JSON.stringify({ message: "Sitemap processado com sucesso.", urlsFound: urls.length }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 200,
+    });
+
+  } catch (error) {
+    console.error(error);
+    return new Response(JSON.stringify({ error: error.message }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 400,
+    });
+  }
+});
