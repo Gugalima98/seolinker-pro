@@ -51,74 +51,137 @@ Deno.serve(async (req) => {
           try {
             if (!row.email) throw new Error('Coluna \'email\' é obrigatória.');
 
-            let userId: string;
-            let userEmail: string = row.email;
+                                    let userId: string;
+                                    let userEmail: string = row.email;
+                        
+                                    // Tentar encontrar o usuário no Supabase Auth
+                                    const { data: { users: authUsers }, error: listUsersError } = await supabaseAdmin.auth.admin.listUsers({
+                                        email: userEmail,
+                                        perPage: 1,
+                                        page: 1,
+                                    });
+                        
+                                    let existingUserInAuth = authUsers && authUsers.length > 0 ? authUsers[0] : null;
+                        
+                                    if (existingUserInAuth) {
+                                      userId = existingUserInAuth.id;
+                                      console.log(` -> Usuário ${userEmail} encontrado no Supabase Auth.`);
+                                    } else {
+                                      // Cenário 1: Usuário NÃO existe no Supabase - Criar novo usuário
+                                      const { data: newUserResponse, error: createError } = await supabaseAdmin.auth.admin.createUser({
+                                        email: row.email,
+                                        password: '8links@123', // Usa a senha padrão definida
+                                        email_confirm: true,
+                                      });
+                                      if (createError) throw createError;
+                                      userId = newUserResponse.user.id;
+                                      console.log(` -> Novo usuário criado no Supabase Auth: ${userEmail}`);
+                                    }            
+                        // Atualizar perfil do usuário (role e name)
+                        await supabaseAdmin.from('profiles').update({
+                            role: row.role || 'client',
+                            name: row.name
+                        }).eq('id', userId);
+            
+                        // Garantir que o usuário tenha um customerId no Stripe
+                        let customerId: string | null = null;
+                        const { data: profileData, error: profileError } = await supabaseAdmin.from('profiles').select('stripe_customer_id').eq('id', userId).single();
+                        if (profileError) {
+                            console.warn(`AVISO: Não foi possível buscar o perfil para o usuário ${userEmail}. Erro: ${profileError.message}`);
+                        } else {
+                            customerId = profileData?.stripe_customer_id;
+                        }
+            
+                        if (!customerId) {
+                            const customer = await stripe.customers.create({
+                                email: userEmail,
+                                metadata: { supabase_user_id: userId }
+                            });
+                            customerId = customer.id;
+                            await supabaseAdmin.from('profiles').update({ stripe_customer_id: customerId }).eq('id', userId);
+                            console.log(` -> Novo cliente Stripe criado para ${userEmail}`);
+                        }
+            
+                        // Lógica de Assinatura Stripe
+                        // Verificar todas as assinaturas do Stripe para este cliente
+                        const subscriptions = await stripe.subscriptions.list({
+                            customer: customerId,
+                            status: 'all', // Incluir todas as assinaturas, ativas e inativas
+                        });
+            
+                        // Apenas assinaturas 'active' (não 'trialing') devem impedir a criação de uma nova
+                        const trulyActiveSubscriptions = subscriptions.data.filter(sub =>
+                            sub.status === 'active'
+                        );
+            
+                        if (trulyActiveSubscriptions.length > 0) {
+                            // Se houver alguma assinatura ATIVA (não trial), NÃO FAZER NADA com a assinatura
+                            console.log(` -> Usuário ${userEmail} já possui assinatura(s) ATIVA(s) no Stripe. Nenhuma alteração de assinatura feita.`);
+                        } else {
+                            // Se não houver assinaturas ATIVAS (pode haver trialing ou inativas)
+                            // Excluir todas as assinaturas existentes (se houver)
+                            if (subscriptions.data.length > 0) {
+                                console.log(` -> Usuário ${userEmail} possui ${subscriptions.data.length} assinatura(s) (incluindo trialing/inativas). Cancelando todas...`);
+                                                    for (const sub of subscriptions.data) {
+                                                        if (sub.status !== 'canceled' && sub.status !== 'incomplete_expired') {
+                                                            try {
+                                                                await stripe.subscriptions.cancel(sub.id);
+                                                                console.log(`  -> Assinatura ${sub.id} cancelada.`);
+                                                            } catch (cancelError) {
+                                                                console.warn(`  -> AVISO: Falha ao cancelar assinatura ${sub.id} para ${userEmail}: ${cancelError.message}. Pode já estar cancelada ou ser inválida.`);
+                                                            }
+                                                        } else {
+                                                            console.log(`  -> Assinatura ${sub.id} já está no status '${sub.status}'. Não é necessário cancelar.`);
+                                                        }
+                                                    }                            }
+            
+                // Criar nova assinatura
+                let priceId: string;
+                let trialEndTimestamp: number | undefined = undefined;
+                let planFromSpreadsheet = row.plan_id; // Assumindo row.plan_id contém o nome do plano como 'starter', 'pro'
 
-            const { data: existingUsers, error: findError } = await supabaseAdmin.rpc('get_user_by_email', { p_email: row.email });
-            if (findError) throw findError;
-            const existingUser = existingUsers && existingUsers.length > 0 ? existingUsers[0] : null;
+                // Aplicar regra de negócio para mapear planos
+                let effectivePlanId = planFromSpreadsheet;
+                if (effectivePlanId === 'empreendedor' || effectivePlanId === 'free') {
+                    effectivePlanId = 'starter';
+                }
 
-            if (existingUser) {
-              userId = existingUser.id;
-            } else {
-              const { data: newUserResponse, error: createError } = await supabaseAdmin.auth.admin.createUser({
-                email: row.email,
-                password: '8links@123', // Usa a senha padrão definida
-                email_confirm: true,
-              });
-              if (createError) throw createError;
-              userId = newUserResponse.user.id;
-            }
-
-            await supabaseAdmin.from('profiles').update({ 
-                role: row.role || 'client', 
-                name: row.name 
-            }).eq('id', userId);
-
-            if (row.plan_id && priceMap[row.plan_id]) {
-              const { data: profile, error: profileError } = await supabaseAdmin.from('profiles').select('*').eq('id', userId).single();
-              if (profileError) throw profileError;
-
-              // VERIFICAÇÃO DE SEGURANÇA: Pula se já tiver uma assinatura ativa ou em trial
-              const activeStatuses = ['active', 'trialing'];
-              if (profile.subscription_status && activeStatuses.includes(profile.subscription_status)) {
-                errors.push(`Linha ${successCount + errorCount + 1}: Usuário ${userEmail} já possui uma assinatura ativa (${profile.subscription_status}). Criação de assinatura pulada.`);
-                successCount++; // Conta como sucesso, pois o usuário foi processado conforme a regra
-                continue; // Pula para o próximo usuário
-              }
-
-              let customerId = profile.stripe_customer_id;
-              if (!customerId) {
-                const customer = await stripe.customers.create({ 
-                  email: userEmail, 
-                  metadata: { supabase_user_id: userId }
-                });
-                customerId = customer.id;
-                await supabaseAdmin.from('profiles').update({ stripe_customer_id: customerId }).eq('id', userId);
-              }
-
-              const priceId = priceMap[row.plan_id];
-              const subscriptionParams: Stripe.SubscriptionCreateParams = {
-                customer: customerId, // Corrigido para usar customerId
-                items: [{ price: priceId }],
-                expand: ['latest_invoice.payment_intent'],
-                payment_behavior: 'default_incomplete',
-                collection_method: 'charge_automatically',
-              };
-              if (row.trial_end_date) {
-                const trialEndTimestamp = Math.floor(new Date(row.trial_end_date).getTime() / 1000);
-                subscriptionParams.trial_end = trialEndTimestamp;
-              }
-              const subscription = await stripe.subscriptions.create(subscriptionParams);
-
-              await supabaseAdmin.from('profiles').update({
-                stripe_subscription_id: subscription.id,
-                plan_id: row.plan_id,
-                subscription_status: subscription.status,
-                subscription_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
-              }).eq('id', userId);
-            }
-
+                if (effectivePlanId && priceMap[effectivePlanId]) {
+                    // Se houver plan_id válido (após mapeamento) na planilha, usar
+                    priceId = priceMap[effectivePlanId];
+                    if (row.trial_end_date) {
+                        trialEndTimestamp = Math.floor(new Date(row.trial_end_date).getTime() / 1000);
+                    }
+                    console.log(` -> Criando nova assinatura para ${userEmail} com plano '${effectivePlanId}' da planilha.`);
+                } else {
+                    // Se não houver plan_id válido (após mapeamento) na planilha, criar com 1 dia de trial e plano 'starter'
+                    priceId = priceMap['starter'];
+                    trialEndTimestamp = Math.floor(new Date(Date.now() + 24 * 60 * 60 * 1000).getTime() / 1000); // 1 dia de trial
+                    console.log(` -> Criando nova assinatura para ${userEmail} com plano 'starter' e 1 dia de trial (plano da planilha inválido ou ausente).`);
+                }
+            
+                            const subscriptionParams: Stripe.SubscriptionCreateParams = {
+                                customer: customerId,
+                                items: [{ price: priceId }],
+                                expand: ['latest_invoice.payment_intent'],
+                                payment_behavior: 'default_incomplete',
+                                collection_method: 'charge_automatically',
+                            };
+                            if (trialEndTimestamp) {
+                                subscriptionParams.trial_end = trialEndTimestamp;
+                            }
+            
+                            const subscription = await stripe.subscriptions.create(subscriptionParams);
+            
+                            await supabaseAdmin.from('profiles').update({
+                                stripe_subscription_id: subscription.id,
+                                plan_id: row.plan_id || 'starter', // Usar starter como fallback
+                                subscription_status: subscription.status,
+                                subscription_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+                            }).eq('id', userId);
+                            console.log(` -> Assinatura criada/atualizada para ${userEmail}.`);
+                        }
+            
             successCount++;
           } catch (e) {
             errorCount++;
