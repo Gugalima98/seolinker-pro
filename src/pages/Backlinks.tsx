@@ -33,7 +33,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { Progress } from '@/components/ui/progress';
-import { PlusCircle, Loader2, ArrowLeft, Eye, Trash2, Calendar as CalendarIcon, Link, CheckCircle, RefreshCw } from 'lucide-react';
+import { PlusCircle, Loader2, ArrowLeft, Eye, Trash2, Calendar as CalendarIcon, Link, CheckCircle, RefreshCw, Info } from 'lucide-react';
 import { CreateBacklinkForm, CreateBacklinkFormValues } from '@/components/forms/CreateBacklinkForm';
 import { SelectNetworkSiteView } from '@/components/views/SelectNetworkSiteView';
 import { format, startOfDay, endOfDay } from 'date-fns';
@@ -41,6 +41,7 @@ import { DateRange } from "react-day-picker"
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { logEvent } from '@/lib/logger';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 // Interfaces
 interface Backlink {
@@ -295,6 +296,14 @@ const BacklinksPage = () => {
     <>
       <Dialog open={isDialogOpen} onOpenChange={(open) => { if (!open) resetFlow(); else setIsDialogOpen(true); }}>
         <div className="p-4 space-y-8 animate-fade-in">
+          <Alert className="bg-blue-50 border-blue-200 text-blue-800 dark:bg-blue-950 dark:border-blue-800 dark:text-blue-200">
+            <Info className="h-4 w-4" />
+            <AlertTitle>Migração em Andamento</AlertTitle>
+            <AlertDescription>
+              Os backlinks criados na versão anterior estão sendo migrados aos poucos para a nova plataforma. Fique tranquilo, todos os seus links continuam online e funcionando normalmente.
+            </AlertDescription>
+          </Alert>
+
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
             <div>
               <h1 className="text-3xl font-bold gradient-text">Meus Backlinks</h1>

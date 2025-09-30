@@ -50,8 +50,10 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requiredRole 
         // Se for uma rota de cliente e o usuário for um cliente, verifica a assinatura
         if (requiredRole === 'client' && user.role === 'client') {
           const isSubscriptionActive = user.subscription_status === 'active' || user.subscription_status === 'trialing';
-          if (!isSubscriptionActive) {
-            // Se a assinatura não estiver ativa ou em trial, redireciona para a página de preços
+          const isSettingsPage = location.pathname.startsWith('/settings');
+
+          if (!isSubscriptionActive && !isSettingsPage) {
+            // Se a assinatura não estiver ativa e não for a página de configurações, redireciona para a página de preços
             navigate('/pricing', { replace: true });
           }
         }

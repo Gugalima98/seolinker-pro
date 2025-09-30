@@ -3,22 +3,26 @@ import { supabase } from '@/lib/supabase';
 import { logEvent } from '@/lib/logger';
 import { User } from '@supabase/supabase-js';
 
-// AppUser now includes the role from the profiles table
+// AppUser now includes more details from the user's profile
 interface AppUser extends User {
   role?: 'client' | 'admin';
   plan_id?: string;
   subscription_status?: string;
+  subscription_period_end?: string;
 }
 
 interface AuthContextType {
   user: AppUser | null;
+  siteCount: number;
   isCardRequired: boolean;
-  isVerifying: boolean; // Novo estado para feedback de verificação
+  isVerifying: boolean;
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
   loading: boolean;
   signInWithGoogle: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  resetPassword: (email: string) => Promise<{ error: any }>;
+  updateUserPassword: (password: string) => Promise<{ error: any }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -31,7 +35,7 @@ export const useAuth = () => {
   return context;
 };
 
-// Função auxiliar para ler um cookie pelo nome
+// Helper function to read a cookie by name
 function getCookie(name: string): string | null {
   const nameEQ = name + "=";
   const ca = document.cookie.split(';');
@@ -46,42 +50,54 @@ function getCookie(name: string): string | null {
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [siteCount, setSiteCount] = useState(0);
   const [isCardRequired, setIsCardRequired] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
 
-  // A nova função busca todos os dados do usuário e o status do cartão do backend
   const fetchUserSession = async (): Promise<boolean> => {
     const { data: { session } } = await supabase.auth.getSession();
     let cardIsRequired = false;
 
     if (session) {
       try {
+        // Fetch user profile and subscription status
         const { data, error } = await supabase.functions.invoke('get-user-status');
         if (error) throw error;
+
+        // Fetch user's site count
+        const { count, error: countError } = await supabase
+          .from('client_sites')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', session.user.id);
+
+        if (countError) throw countError;
+        setSiteCount(count ?? 0);
 
         const appUser: AppUser = {
           ...session.user,
           role: data.profile?.role as 'client' | 'admin',
           plan_id: data.profile?.plan_id,
           subscription_status: data.profile?.subscription_status,
+          subscription_period_end: data.profile?.subscription_period_end,
         };
         setUser(appUser);
 
-        // A lógica do popup agora depende apenas de hasCard
         cardIsRequired = !data.hasCard;
         setIsCardRequired(!data.hasCard);
 
       } catch (error: any) {
-        console.error("Erro ao buscar status do usuário:", error.message);
-        setUser(null); // Desloga em caso de erro
+        console.error("Erro ao buscar dados da sessão do usuário:", error.message);
+        setUser(null);
+        setSiteCount(0);
         setIsCardRequired(false);
       }
     } else {
       setUser(null);
+      setSiteCount(0);
       setIsCardRequired(false);
     }
     setLoading(false);
-    return cardIsRequired; // Retorna se o cartão ainda é necessário
+    return cardIsRequired;
   };
 
   useEffect(() => {
@@ -92,7 +108,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (params.get('setup_success')) {
         setIsVerifying(true);
         let attempts = 0;
-        const maxAttempts = 10; // Tenta por 20 segundos
+        const maxAttempts = 10;
 
         const intervalId = setInterval(async () => {
           console.log(`Verificando status do cartão... Tentativa ${attempts + 1}`);
@@ -111,7 +127,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     handleAuth();
 
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN') {
+      if (event === 'SIGNED_IN' || event === 'PASSWORD_RECOVERY') {
         handleAuth();
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
@@ -129,8 +145,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       logEvent('error', `Failed login attempt for ${email}.`, { error: error.message });
       return false;
     }
-    
-    await fetchUserSession(); // Ensure user state is updated immediately after successful login
+    await fetchUserSession();
     logEvent('success', `User ${email} logged in successfully.`);
     return true;
   };
@@ -141,31 +156,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signInWithGoogle = async () => {
-    // Pega o código de afiliado do cookie
     const affiliateCode = getCookie('affiliate_code');
-    
     const options: { redirectTo: string; data?: any } = {
       redirectTo: window.location.origin + '/auth/callback',
     };
-
     if (affiliateCode) {
-      console.log(`Código de afiliado "${affiliateCode}" encontrado no cookie. Enviando para o Supabase.`);
-      options.data = {
-        affiliate_code: affiliateCode
-      };
+      options.data = { affiliate_code: affiliateCode };
     }
-
-    await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: options,
-    });
+    await supabase.auth.signInWithOAuth({ provider: 'google', options: options });
   };
 
   const refreshUser = async () => {
     await fetchUserSession();
   };
 
-  const value = { user, loading, isCardRequired, isVerifying, login, logout, signInWithGoogle, refreshUser };
+  const resetPassword = async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin + '/update-password',
+    });
+    return { error };
+  };
+
+  const updateUserPassword = async (password: string) => {
+    const { error } = await supabase.auth.updateUser({ password });
+    return { error };
+  };
+
+  const value = { user, siteCount, loading, isCardRequired, isVerifying, login, logout, signInWithGoogle, refreshUser, resetPassword, updateUserPassword };
 
   return (
     <AuthContext.Provider value={value}>

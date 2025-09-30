@@ -13,7 +13,8 @@ const dataTypeOptions = [
   { value: 'users', label: 'Usuários' },
   { value: 'client_sites', label: 'Sites de Clientes' },
   { value: 'network_sites', label: 'Sites da Rede' },
-  { value: 'backlinks', label: 'Backlinks' },
+  { value: 'backlinks', label: 'Backlinks (Padrão)' },
+  { value: 'review_backlinks', label: 'Backlinks para Revisão' },
 ];
 
 const templates: Record<string, string> = {
@@ -28,6 +29,7 @@ const AdminBulkImport = () => {
   const [dataType, setDataType] = useState<string>('users');
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
+  const [enriching, setEnriching] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [progressMessage, setProgressMessage] = useState('');
 
@@ -107,6 +109,18 @@ const AdminBulkImport = () => {
     });
   };
 
+  const handleEnrichBacklinks = async () => {
+    setEnriching(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('batch-enrich-backlinks');
+      if (error) throw error;
+      toast({ title: 'Processo Iniciado', description: data.message });
+    } catch (error: any) {
+      toast({ title: 'Erro ao Iniciar Processo', description: error.message, variant: 'destructive' });
+    }
+    setEnriching(false);
+  };
+
   return (
     <div className="space-y-8">
       <h1 className="text-3xl font-bold">Importação em Massa</h1>
@@ -159,6 +173,22 @@ const AdminBulkImport = () => {
           </CardContent>
         </Card>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Enriquecer Dados de Backlinks</CardTitle>
+          <CardDescription>
+            Inicia um processo em segundo plano para encontrar e preencher o ID do Post e a URL de publicação
+            para todos os backlinks que ainda não possuem esses dados.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button onClick={handleEnrichBacklinks} disabled={enriching}>
+            {enriching ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+            {enriching ? 'Processando...' : 'Iniciar Enriquecimento de Backlinks'}
+          </Button>
+        </CardContent>
+      </Card>
     </div>
   );
 };

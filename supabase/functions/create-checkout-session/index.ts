@@ -1,6 +1,6 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { corsHeaders } from '../_shared/cors.ts';
-import Stripe from 'https://esm.sh/stripe@11.2.0';
+import Stripe from 'https://esm.sh/stripe@14.23.0';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 // Map of plan IDs to their monthly Stripe Price ID.
@@ -8,6 +8,7 @@ const priceMap = {
   starter: 'price_1S3PvoDssGMGr4ApVHjLcKBy',
   pro: 'price_1S3PwCDssGMGr4ApXhYzENaK',
   agency: 'price_1S3PwdDssGMGr4ApVu7rU8kB',
+  legacy: 'price_1S3fgvDssGMGr4Ap2KNREK4i',
 };
 
 serve(async (req) => {
@@ -27,7 +28,7 @@ serve(async (req) => {
     }
 
     const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY')!, {
-      apiVersion: '2023-10-16',
+      apiVersion: '2024-04-10',
       httpClient: Stripe.createFetchHttpClient(),
     });
 

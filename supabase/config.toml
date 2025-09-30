@@ -117,3 +117,15 @@ enabled = true
 verify_jwt = false # A verificação de admin é feita dentro da função
 import_map = "./functions/_shared/deno.json"
 entrypoint = "./functions/bulk-import/index.ts"
+
+[functions.process-enrichment-queue]
+enabled = true
+verify_jwt = false
+import_map = "./functions/process-enrichment-queue/deno.json"
+entrypoint = "./functions/process-enrichment-queue/index.ts"
+
+[functions.process-backlinks-to-review]
+enabled = true
+verify_jwt = false
+import_map = "./functions/process-backlinks-to-review/deno.json"
+entrypoint = "./functions/process-backlinks-to-review/index.ts"

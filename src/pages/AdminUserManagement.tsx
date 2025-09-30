@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Edit, Trash2, PlusCircle, CalendarIcon } from 'lucide-react';
+import { Edit, Trash2, PlusCircle, CalendarIcon, Users, UserCheck, UserPlus } from 'lucide-react';
 import { format } from "date-fns";
 import { User } from '@/data/users';
 import {
@@ -586,6 +586,9 @@ const AdminUserManagement = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [planFilter, setPlanFilter] = useState('');
+  const [totalUsers, setTotalUsers] = useState(0);
+  const [clientUsers, setClientUsers] = useState(0);
+  const [newUsersLast30Days, setNewUsersLast30Days] = useState(0);
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -596,10 +599,10 @@ const AdminUserManagement = () => {
       });
       if (error) throw error;
 
-      const { users } = data;
-      console.log('Raw users from function:', users);
+      const { users: fetchedUsers } = data;
+      console.log('Raw users from function:', fetchedUsers);
 
-      const formattedUsers = users.map(user => ({
+      const formattedUsers = fetchedUsers.map(user => ({
         id: user.id,
         email: user.email || '',
         role: user.role || 'client', // Role is now directly on the user object from the edge function
@@ -611,6 +614,15 @@ const AdminUserManagement = () => {
       }));
       console.log('Formatted users:', formattedUsers);
       setUsers(formattedUsers as User[]);
+
+      // Calculate statistics
+      setTotalUsers(formattedUsers.length);
+      setClientUsers(formattedUsers.filter(u => u.role === 'client').length);
+
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      setNewUsersLast30Days(formattedUsers.filter(u => new Date(u.created_at) > thirtyDaysAgo).length);
+
     } catch (error) {
       console.error('Error fetching users:', error);
       // Display an error message to the user
@@ -652,6 +664,40 @@ const AdminUserManagement = () => {
           </Select>
           <AddUserDialog onUserAdded={fetchUsers} />
         </div>
+      </div>
+
+      {/* Statistics Cards */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total de Usuários</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{totalUsers}</div>
+            <p className="text-xs text-muted-foreground">Todos os usuários registrados</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Usuários Clientes</CardTitle>
+            <UserCheck className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{clientUsers}</div>
+            <p className="text-xs text-muted-foreground">Usuários com a role 'client'</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Novos Usuários (30 Dias)</CardTitle>
+            <UserPlus className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{newUsersLast30Days}</div>
+            <p className="text-xs text-muted-foreground">Usuários registrados no último mês</p>
+          </CardContent>
+        </Card>
       </div>
 
       {/* User List Card */}

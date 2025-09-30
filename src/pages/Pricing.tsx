@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 import { plans } from '@/data/plans';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Check, X } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Check, X, Terminal } from 'lucide-react';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { supabase } from '@/lib/supabase';
 import { loadStripe } from '@stripe/stripe-js';
@@ -12,6 +14,22 @@ import { useToast } from '@/hooks/use-toast';
 const Pricing = () => {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+  const { user } = useAuth();
+
+  const isSubscriptionInactive = 
+    user && 
+    user.subscription_status && 
+    !['active', 'trialing'].includes(user.subscription_status);
+
+  const displayedPlans = useMemo(() => {
+    const isLegacyUserWithInactivePlan = isSubscriptionInactive && user?.plan_id === 'legacy';
+
+    if (isLegacyUserWithInactivePlan) {
+      return plans; // Mostra todos os planos, incluindo o Legacy
+    }
+    // Para todos os outros usuários, esconde o plano Legacy
+    return plans.filter(plan => plan.id !== 'legacy');
+  }, [user, isSubscriptionInactive]);
 
   const handleSubscribe = async (planId: string) => {
     setLoading(true);
@@ -70,10 +88,19 @@ const Pricing = () => {
         <p className="text-lg text-muted-foreground">
           Encontre a solução perfeita para suas necessidades de backlinks.
         </p>
+        
+        {isSubscriptionInactive && (
+          <Alert variant="destructive" className="mt-6 text-left">
+            <AlertTitle>Plano Expirado ou Inativo</AlertTitle>
+            <AlertDescription>
+              Seu plano atual não está ativo. Por favor, escolha um novo plano para reativar seu acesso completo à plataforma.
+            </AlertDescription>
+          </Alert>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {plans.map((plan) => (
+        {displayedPlans.map((plan) => (
           <Card 
             key={plan.id} 
             className={`flex flex-col ${plan.isPopular ? 'border-primary shadow-lg' : ''}`}

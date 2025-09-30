@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { plans } from '@/data/plans'; // Importa os dados dos planos
 import {
   LayoutDashboard,
   Globe,
@@ -36,7 +37,7 @@ interface SidebarNavProps {
 }
 
 const SidebarNav: React.FC<SidebarNavProps> = ({ menuType }) => {
-  const { user, logout } = useAuth();
+  const { user, logout, siteCount } = useAuth();
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -44,34 +45,47 @@ const SidebarNav: React.FC<SidebarNavProps> = ({ menuType }) => {
     navigate('/login');
   };
 
-  const planDisplayNameMap: { [key: string]: string } = {
-    starter: 'Starter',
-    pro: 'Pro',
-    agency: 'Agência',
-    legacy: 'Legacy',
-    'legacy-club': 'Legacy Club',
-  };
-  const userPlanName = user?.plan_id ? planDisplayNameMap[user.plan_id] : 'N/A';
+  const { userPlanName, planDetails, expirationInfo } = useMemo(() => {
+    const planId = user?.plan_id || 'starter';
+    const planDisplayNameMap: { [key: string]: string } = {
+      starter: 'Starter',
+      pro: 'Pro',
+      agency: 'Agência',
+      legacy: 'Legacy',
+      'legacy-club': 'Legacy Club',
+    };
+    const name = planDisplayNameMap[planId];
+    const details = plans.find(p => p.id === planId);
 
-  const userNavItems = [
-    { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-    { to: '/sites', icon: Globe, label: 'Meus Sites' },
-    { to: '/backlinks', icon: LinkIcon, label: 'Backlinks' },
-        { to: '/club', icon: Users, label: 'Club' },
-    { to: '/affiliate', icon: DollarSign, label: 'Afiliados' },
-    { to: '/support', icon: HelpCircle, label: 'Suporte' },
-  ];
+    let expInfo = 'Verifique sua assinatura';
+    const isSubscriptionActive = user?.subscription_status === 'active' || user?.subscription_status === 'trialing';
 
+    if (isSubscriptionActive && user?.subscription_period_end) {
+      const endDate = new Date(user.subscription_period_end);
+      expInfo = `Vence em: ${endDate.toLocaleDateString('pt-BR')}`;
+    } else if (user?.subscription_status) {
+      expInfo = `Status: ${user.subscription_status}`;
+    }
+
+    return { userPlanName: name, planDetails: details, expirationInfo: expInfo };
+  }, [user]);
+
+    const userNavItems = [
+      { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+      { to: '/sites', icon: Globe, label: 'Meus Sites' },
+      { to: '/backlinks', icon: LinkIcon, label: 'Backlinks' },
+          { to: '/club', icon: Users, label: 'Club' },
+      { to: '/support', icon: HelpCircle, label: 'Suporte' },
+    ];
   const adminNavItems = [
-    { to: '/admin/dashboard', icon: LayoutDashboard, label: 'Dashboard' }, // Novo item
-    
+    { to: '/admin/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/admin/users', icon: UsersRound, label: 'Gerenciar Usuários' },
     { to: '/admin/network-sites', icon: Globe, label: 'Gerenciar Sites da Rede' },
     { to: '/admin/affiliates', icon: DollarSign, label: 'Gestão de Afiliados' },
     { to: '/admin/courses', icon: LayoutDashboard, label: 'Gerenciar Cursos' },
     { to: '/admin/client-sites', icon: Users, label: 'Sites dos Clientes' },
     { to: '/admin/logs', icon: LayoutDashboard, label: 'Logs da Plataforma' },
-    { to: '/admin/apis', icon: LayoutDashboard, label: 'Configuração de APIs' }, // Novo item
+    { to: '/admin/apis', icon: LayoutDashboard, label: 'Configuração de APIs' },
     { to: '/admin/reports', icon: BarChart, label: 'Relatórios' },
     { to: '/admin/prompts', icon: Terminal, label: 'Prompts' },
     { to: '/admin/bulk-import', icon: Upload, label: 'Importação em Massa' },
@@ -87,7 +101,7 @@ const SidebarNav: React.FC<SidebarNavProps> = ({ menuType }) => {
           <div className="w-8 h-8 bg-gradient-to-r from-primary to-primary-hover rounded-lg flex items-center justify-center">
             <LinkIcon className="w-5 h-5 text-white" />
           </div>
-          <h1 className="text-xl font-bold gradient-text">SEO Backlinks</h1>
+          <h1 className="text-xl font-bold gradient-text">8links</h1>
         </div>
       </SidebarHeader>
       <SidebarContent>
@@ -157,17 +171,14 @@ const SidebarNav: React.FC<SidebarNavProps> = ({ menuType }) => {
                     <p className="text-sm text-primary font-semibold">Seu Plano</p>
                     <p className="font-bold text-xl mt-1">{userPlanName}</p>
                     
-                    <p className="text-xs text-primary/80 mt-2 h-8">
-                        {
-                          {
-                            starter: 'Ideal para começar.',
-                            pro: 'Mais sites e recursos.',
-                            agency: 'Tudo para sua agência.',
-                            legacy: 'Acesso total legado.',
-                            'legacy-club': 'Acesso total e encontros.'
-                          }[user?.plan_id || 'starter']
-                        }
-                    </p>
+                    <div className="text-xs text-primary/80 mt-2 space-y-1">
+                      <p>
+                        Sites: {siteCount} / {planDetails?.siteLimit === Infinity ? '∞' : planDetails?.siteLimit || 'N/A'}
+                      </p>
+                      <p>
+                        {expirationInfo}
+                      </p>
+                    </div>
 
                     <Button 
                       className="w-full mt-4 bg-primary text-primary-foreground hover:bg-primary/90" 

@@ -6,6 +6,7 @@ interface Plan {
   monthlyPrice: number;
   isPopular?: boolean;
   buttonText: string;
+  siteLimit: number;
 }
 
 export const plans: Plan[] = [
@@ -22,6 +23,7 @@ export const plans: Plan[] = [
     ],
     monthlyPrice: 97,
     buttonText: 'Escolher Starter',
+    siteLimit: 1,
   },
   {
     id: 'pro',
@@ -37,6 +39,7 @@ export const plans: Plan[] = [
     monthlyPrice: 197,
     isPopular: true,
     buttonText: 'Escolher Pro',
+    siteLimit: 5,
   },
   {
     id: 'agency',
@@ -52,5 +55,21 @@ export const plans: Plan[] = [
     ],
     monthlyPrice: 397,
     buttonText: 'Escolher Agência',
+    siteLimit: 10,
+  },
+  {
+    id: 'legacy',
+    name: 'Legacy',
+    description: 'Plano exclusivo para membros antigos. Reative para continuar.',
+    features: [
+      'Sites ilimitados',
+      'Backlinks ilimitados',
+      'Acesso a sites de nicho',
+      'Suporte por email',
+      'Relatórios básicos',
+    ],
+    monthlyPrice: 97,
+    buttonText: 'Reativar Legacy',
+    siteLimit: Infinity,
   },
 ];

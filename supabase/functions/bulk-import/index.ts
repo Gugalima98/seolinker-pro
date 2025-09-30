@@ -134,28 +134,46 @@ Deno.serve(async (req) => {
             
             const normalizedEmail = row.user_email.trim().toLowerCase();
 
-            // Busca o usuário diretamente na autenticação (auth.users) pelo email
-            const { data: foundUsers, error: findError } = await supabaseAdmin.rpc('get_user_by_email', { p_email: normalizedEmail });
-            if (findError) {
-              throw new Error(`Erro ao buscar usuário ${normalizedEmail}: ${findError.message}`);
+            // Lógica para encontrar ou criar o usuário (consistente com process-backlinks-to-review)
+            let userId = null;
+            const { data: listUsersData, error: listUsersError } = await supabaseAdmin.auth.admin.listUsers({
+                query: normalizedEmail,
+                perPage: 1,
+                page: 1,
+            });
+
+            let foundUserInAuth = null;
+            if (!listUsersError && listUsersData?.users && listUsersData.users.length > 0) {
+                foundUserInAuth = listUsersData.users[0];
             }
 
-            const foundUser = foundUsers && foundUsers.length > 0 ? foundUsers[0] : null;
-            if (!foundUser) {
-              throw new Error(`Usuário com email ${row.user_email} não encontrado em auth.users.`);
+            if (listUsersError || !foundUserInAuth) {
+              const randomPassword = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+              const { data: newUser, error: createAuthUserError } = await supabaseAdmin.auth.admin.createUser({
+                email: normalizedEmail,
+                password: randomPassword,
+                email_confirm: true,
+              });
+
+              if (createAuthUserError || !newUser) {
+                throw new Error(`Falha ao criar usuário ${normalizedEmail}: ${createAuthUserError?.message || "Erro desconhecido"}`);
+              }
+              userId = newUser.user.id;
+            } else {
+              userId = foundUserInAuth.id;
             }
-            const userId = foundUser.id;
             
-            // Limpa a URL para remover protocolo, www e barra final
+            // Limpa a URL para remover protocolo, www e barra final, e pega só o domínio
             const cleanedUrl = row.site_url
               .replace(/^https?:\/\//, '') 
               .replace(/^www\./, '')
-              .replace(/\/$/, '');
+              .replace(/\/$/, '')
+              .toLowerCase();
 
             const newSiteData = {
               user_id: userId,
               url: cleanedUrl, // Usa a URL padronizada
-              type: row.site_type || 'Blog de Afiliado',
+              type: row.site_type || 'unknown', // Default type para 'unknown'
               da: parseInt(row.da) || 0,
               backlinks: parseInt(row.backlinks) || 0,
               ref_domains: parseInt(row.ref_domains) || 0,
@@ -166,7 +184,11 @@ Deno.serve(async (req) => {
               niche_tertiary: row.niche_tertiary,
             };
 
-            const { error } = await supabaseAdmin.from('client_sites').insert(newSiteData);
+            // Usa upsert para evitar duplicatas e atualizar se já existir
+            const { error } = await supabaseAdmin.from('client_sites').upsert(newSiteData, {
+                onConflict: 'user_id,url', // Conflito na chave composta
+                ignoreDuplicates: false, // Atualiza se houver conflito
+            });
             if (error) throw error;
             successCount++;
           } catch (e) {
@@ -209,14 +231,27 @@ Deno.serve(async (req) => {
         break;
 
       case 'backlinks':
+        console.log('Iniciando importação de backlinks com lógica avançada...');
         // Monta mapas para consulta rápida
+        console.log('Mapeando sites de clientes, sites da rede e usuários...');
         const { data: clientSites } = await supabaseAdmin.from('client_sites').select('id, url');
         const clientSiteUrlToId = new Map((clientSites || []).map(s => [s.url.replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/$/, ''), s.id]));
 
         const { data: networkSites } = await supabaseAdmin.from('network_sites').select('id, domain');
         const networkSiteDomainToId = new Map((networkSites || []).map(s => [s.domain.replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/$/, ''), s.id]));
         
-        // Busca TODOS os usuários com paginação
+        // Busca o ID do site placeholder
+        const { data: placeholderSite, error: placeholderError } = await supabaseAdmin
+          .from('network_sites')
+          .select('id')
+          .eq('domain', 'https://site-nao-encontrado.com')
+          .single();
+
+        if (placeholderError || !placeholderSite) {
+          throw new Error("O site de rede placeholder 'site-nao-encontrado.com' não foi encontrado. Crie-o manualmente na tabela network_sites.");
+        }
+        const placeholderNetworkSiteId = placeholderSite.id;
+
         let allUsers = [];
         let page = 1;
         while (true) {
@@ -227,37 +262,80 @@ Deno.serve(async (req) => {
           page++;
         }
         const userEmailToId = new Map(allUsers.map(u => [u.email.trim().toLowerCase(), u.id]));
+        console.log('Mapeamento concluído.');
 
         let skippedCount = 0;
 
-        for (const row of rows) {
+        for (const [index, row] of rows.entries()) {
+          console.log(`[${index + 1}/${rows.length}] Processando linha para ${row.user_email}...`);
           try {
-            if (!row.client_site_url || !row.network_site_domain || !row.user_email)
-              throw new Error('Colunas client_site_url, network_site_domain, e user_email são obrigatórias.');
+            if (!row.client_site_url || !row.user_email) {
+              throw new Error('Colunas client_site_url e user_email são obrigatórias.');
+            }
 
             const normalizedEmail = row.user_email.trim().toLowerCase();
-            const clientSiteId = clientSiteUrlToId.get(row.client_site_url);
-            const networkSiteId = networkSiteDomainToId.get(row.network_site_domain);
             const userId = userEmailToId.get(normalizedEmail);
-
             if (!userId) throw new Error(`Usuário com email ${row.user_email} não encontrado.`);
-            if (!clientSiteId) throw new Error(`Site de cliente com URL ${row.client_site_url} não encontrado.`);
-            if (!networkSiteId) throw new Error(`Site da rede com domínio ${row.network_site_domain} não encontrado.`);
+
+            const normalizedClientSiteUrl = row.client_site_url
+              .replace(/^https?:\/\//, '') 
+              .replace(/^www\./, '')
+              .replace(/\/$/, '')
+              .toLowerCase();
+
+            // Lógica para encontrar ou criar o site do cliente
+            let clientSiteId = clientSiteUrlToId.get(normalizedClientSiteUrl);
+            if (!clientSiteId) {
+              console.log(`  -> Site de cliente '${normalizedClientSiteUrl}' não encontrado. Criando...`);
+              const { data: newClientSite, error: createError } = await supabaseAdmin
+                .from('client_sites')
+                .insert({
+                  user_id: userId,
+                  url: normalizedClientSiteUrl,
+                  status: 'active',
+                  type: 'unknown', // Default type changed to 'unknown'
+                })
+                .select('id')
+                .single();
+              
+              if (createError) throw new Error(`Falha ao criar site de cliente: ${createError.message}`);
+              
+              clientSiteId = newClientSite.id;
+              clientSiteUrlToId.set(normalizedClientSiteUrl, clientSiteId); // Adiciona ao mapa para evitar recriação no mesmo lote
+              console.log(`  -> Site de cliente criado com ID: ${clientSiteId}`);
+            }
+
+            // Lógica para encontrar ou usar placeholder para o site da rede
+            const normalizedNetworkSiteDomain = row.network_site_domain
+              .replace(/^https?:\/\//, '')
+              .replace(/^www\./, '')
+              .replace(/\/$/, '')
+              .toLowerCase();
+
+            let networkSiteId = networkSiteDomainToId.get(normalizedNetworkSiteDomain);
+            if (!networkSiteId) {
+              console.log(`  -> AVISO: Site da rede '${row.network_site_domain}' não encontrado. Usando placeholder.`);
+              networkSiteId = placeholderNetworkSiteId;
+            }
 
             // Verifica se o backlink já existe para evitar duplicatas
             const { data: existing, error: selectError } = await supabaseAdmin
               .from('backlinks')
               .select('id')
+              .eq('user_id', userId)
               .eq('client_site_id', clientSiteId)
               .eq('network_site_id', networkSiteId)
               .eq('target_url', row.target_url)
+              .eq('article_title', row.article_title)
+              .eq('created_at', row.created_at) // Adiciona verificação de data
               .limit(1);
 
             if (selectError) throw selectError;
 
             if (existing && existing.length > 0) {
+              console.log('  -> AVISO: Backlink já existe. Pulando.');
               skippedCount++;
-              continue; // Pula para o próximo se já existir
+              continue;
             }
 
             const { error } = await supabaseAdmin.from('backlinks').insert({
@@ -266,19 +344,24 @@ Deno.serve(async (req) => {
               network_site_id: networkSiteId,
               target_url: row.target_url,
               anchor_text: row.anchor_text,
-              status: 'publicado', // Define o status como publicado
+              status: 'publicado',
               article_title: row.article_title,
-              wp_post_id: row.wp_post_id,
-              created_at: row.created_at, // Usa a data de criação do CSV
+              created_at: row.created_at,
             });
+            
             if (error) throw error;
+            
+            console.log('  -> SUCESSO: Backlink inserido.');
             successCount++;
+
           } catch (e) {
+            console.error(`  -> ERRO FATAL na linha ${index + 1}:`, e.message);
             errorCount++;
-            errors.push(`Linha ${successCount + errorCount}: ${e.message}`);
+            errors.push(`Linha ${index + 1}: ${e.message}`);
           }
         }
-        // Adiciona o skippedCount na mensagem de retorno
+        
+        console.log('Processamento do lote concluído.');
         return new Response(JSON.stringify({
           message: `Importação concluída. ${skippedCount} registros foram pulados por já existirem.`,
           successCount,
@@ -288,6 +371,28 @@ Deno.serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           status: 200,
         });
+
+      case 'review_backlinks':
+        console.log('Iniciando importação de backlinks para revisão...');
+        const reviewData = rows.map(row => ({
+          user_email: row.user_email,
+          network_site_domain: row.network_site_domain,
+          article_title: row.article_title,
+          wp_post_id_original: row.wp_post_id_original,
+          original_created_at: row.created_at,
+        }));
+
+        const { error: reviewInsertError } = await supabaseAdmin
+          .from('backlinks_to_review')
+          .insert(reviewData);
+
+        if (reviewInsertError) {
+          throw new Error(`Erro ao inserir backlinks para revisão: ${reviewInsertError.message}`);
+        }
+
+        successCount = reviewData.length;
+        console.log(`${successCount} registros inseridos para revisão.`);
+        break;
 
       default:
         throw new Error(`Tipo de dado inválido: ${dataType}`);

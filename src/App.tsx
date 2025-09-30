@@ -33,6 +33,7 @@ import AdminPrompts from "./pages/AdminPrompts";
 import AdminTickets from "./pages/AdminTickets"; // New import
 import AdminAffiliates from "./pages/AdminAffiliates"; // New import
 import AdminBulkImport from "./pages/AdminBulkImport"; // New import
+import UpdatePassword from "./pages/UpdatePassword"; // New import
 
 import AdminLayout from "@/components/layouts/AdminLayout";
 
@@ -48,6 +49,7 @@ const App = () => (
           <Routes>
             {/* Public Routes */}
             <Route path="/login" element={<Login />} />
+            <Route path="/update-password" element={<UpdatePassword />} />
             <Route path="/auth/callback" element={<AuthCallback />} />
             <Route path="/ref/:affiliateCode" element={<ReferralHandler />} />
 
